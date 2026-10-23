@@ -56,7 +56,7 @@ local MovementConfig = {
 
 	Slingshot = {
 		Tag = "Slingshot", -- CollectionService tag on launch ramps
-		BaseLaunch = 55,
+		BaseLaunch = 68,
 		SpeedToHeight = 0.9, -- extra upward speed per stud/s of slide speed
 		HorizontalKeep = 0.7,
 		Cooldown = 0.6,

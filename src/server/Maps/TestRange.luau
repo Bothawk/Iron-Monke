@@ -1,6 +1,6 @@
 --!strict
--- Builds a gray test map (movement areas and a shooting range) when the place has
--- no "Map" folder yet. Cinder Terraces replaces it in phase 5.
+-- TEST RANGE: a gray map with labeled movement areas (slopes, wall-kick alley,
+-- Slingshot, gap jumps) and a shooting range with dummies. Good for tuning.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +18,23 @@ local COLORS = {
 local FLOOR_SIZE = 600
 local GRID_SPACING = 20
 
-local TestMapBuilder = {}
+local TestRange = {
+	Id = "TestRange",
+	DisplayName = "Test Range",
+	KillY = -50,
+	HasDummies = true, -- TestDummyService fills the shooting range
+	Lighting = {
+		ClockTime = 14.5,
+		Brightness = 2.6,
+		OutdoorAmbient = Color3.fromRGB(128, 120, 132),
+		AtmosphereColor = Color3.fromRGB(220, 220, 230),
+		AtmosphereDecay = Color3.fromRGB(120, 120, 140),
+		AtmosphereDensity = 0.2,
+		AtmosphereHaze = 0.6,
+		Tint = Color3.fromRGB(255, 255, 255),
+		SunRays = 0.04,
+	},
+}
 
 local function makePart(parent: Instance, name: string, size: Vector3, cframe: CFrame, color: Color3?): Part
 	local part = Instance.new("Part")
@@ -168,33 +184,17 @@ local function buildShootingRange(map: Instance)
 	makeSign(map, "COVER TEST: must NOT be hittable from here", Vector3.new(35, 17, -74), Vector3.new(0, 17, 0))
 end
 
-local function removeTemplateDefaults()
-	-- The Baseplate template's own floor and spawn would overlap the test map.
-	for _, name in { "Baseplate", "SpawnLocation" } do
-		local existing = workspace:FindFirstChild(name)
-		if existing then
-			existing:Destroy()
-		end
-	end
-end
-
-function TestMapBuilder.Build()
-	if workspace:FindFirstChild("Map") then
-		return
-	end
-	removeTemplateDefaults()
-
-	local map = Instance.new("Folder")
-	map.Name = "Map"
-
+function TestRange.Build(map: Folder)
 	buildFloor(map)
 	buildSlideSlopes(map)
 	buildWallKickAlley(map)
 	buildSlingshot(map)
 	buildGapJumps(map)
 	buildShootingRange(map)
-	map:SetAttribute("IsTestMap", true)
 
+	local spawns = Instance.new("Folder")
+	spawns.Name = "Spawns"
+	spawns.Parent = map
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Anchored = true
 	spawn.Size = Vector3.new(8, 1, 8)
@@ -203,9 +203,7 @@ function TestMapBuilder.Build()
 	spawn.Duration = 0
 	spawn.Color = COLORS.Accent
 	spawn.Material = Enum.Material.SmoothPlastic
-	spawn.Parent = map
-
-	map.Parent = workspace
+	spawn.Parent = spawns
 end
 
-return TestMapBuilder
+return TestRange

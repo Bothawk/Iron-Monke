@@ -15,6 +15,8 @@ local KillTags = require(ReplicatedStorage.Shared.Combat.KillTags)
 local Net = require(ReplicatedStorage.Shared.Net)
 local WeaponConfig = require(ReplicatedStorage.Shared.Config.WeaponConfig)
 local LagCompensation = require(script.Parent.LagCompensation)
+local MatchState = require(script.Parent.MatchState)
+local SpawnService = require(script.Parent.SpawnService)
 local StatsService = require(script.Parent.StatsService)
 local WorldWeaponService = require(script.Parent.WorldWeaponService)
 
@@ -244,7 +246,7 @@ local function onFireShot(
 	if not state or not character or not getAliveHumanoid(character) or not head then
 		return
 	end
-	if state.Equipped ~= "Sniper" then
+	if state.Equipped ~= "Sniper" or not MatchState.CombatEnabled then
 		return
 	end
 
@@ -281,6 +283,7 @@ local function onFireShot(
 	state.Ammo -= 1
 	state.LastShotAt = serverClock
 	state.LastShotTime = shotTime
+	SpawnService.EndProtection(character)
 
 	-- Other players draw the tracer and impact. Hitting a character shows no bullet hole.
 	local params = RaycastParams.new()
@@ -357,6 +360,9 @@ local function onMeleeHit(player: Player, kind: any, victim: any, attackTime: an
 	if state.Equipped ~= "Knife" or serverClock - state.EquippedAt < WeaponConfig.Knife.SwitchTime * 0.5 then
 		return
 	end
+	if not MatchState.CombatEnabled then
+		return
+	end
 	local attack = if kind == "Slash" then WeaponConfig.Knife.Slash else WeaponConfig.Knife.Lunge
 	local lastAt = if kind == "Slash" then state.LastSlashAt else state.LastLungeAt
 	if serverClock - lastAt < attack.Cooldown - Validation.TimingTolerance * 2 then
@@ -396,6 +402,7 @@ local function onMeleeHit(player: Player, kind: any, victim: any, attackTime: an
 	else
 		state.LastLungeAt = serverClock
 	end
+	SpawnService.EndProtection(character)
 	applyDamage(
 		player,
 		victimModel,
@@ -454,11 +461,6 @@ local function onCharacterAdded(player: Player, character: Model)
 	humanoid.Died:Connect(function()
 		lastDamagedAt[humanoid] = nil
 	end)
-end
-
--- Lets other server code (test dummies) take part in combat.
-function CombatService.RegisterCombatant(model: Model)
-	LagCompensation.Track(model)
 end
 
 function CombatService.Start()

@@ -17,6 +17,8 @@ Net.Names = {
 	Equip = "Equip", -- client → server: slot
 	MeleeHit = "MeleeHit", -- client → server: kind, victim, attackTime
 	KillFeed = "KillFeed", -- server → everyone: who killed whom
+	MatchVote = "MatchVote", -- client → server: map id
+	MatchResults = "MatchResults", -- server → everyone: final standings
 }
 
 local function getFolder(): Instance

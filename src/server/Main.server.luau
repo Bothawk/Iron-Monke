@@ -1,5 +1,5 @@
 --!strict
--- Server entry point.
+-- Server entry point. MatchService loads the first map and runs the match loop.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -10,18 +10,20 @@ local AntiCheatService = require(Services.AntiCheatService)
 local CombatService = require(Services.CombatService)
 local LagCompensation = require(Services.LagCompensation)
 local LightingService = require(Services.LightingService)
+local MapService = require(Services.MapService)
+local MatchService = require(Services.MatchService)
+local SpawnService = require(Services.SpawnService)
 local StatsService = require(Services.StatsService)
-local TestDummyService = require(Services.TestDummyService)
-local TestMapBuilder = require(Services.TestMapBuilder)
 local WorldWeaponService = require(Services.WorldWeaponService)
 
 workspace.Gravity = Config.Gravity
 
 LightingService.Start()
-TestMapBuilder.Build()
+MapService.Start()
 AntiCheatService.Start()
 LagCompensation.Start()
 StatsService.Start()
+SpawnService.Start()
 CombatService.Start()
 WorldWeaponService.Start()
-TestDummyService.Start()
+MatchService.Start()

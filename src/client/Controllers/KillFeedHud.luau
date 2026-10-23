@@ -83,14 +83,23 @@ function KillFeedHud.Start()
 		label.TextSize = 15
 		label.TextColor3 = Color3.new(1, 1, 1)
 		label.RichText = true
-		label.Text = string.format(
-			'<font color="%s">%s</font>  <font color="#aaaaaa">[%s]</font>  <font color="%s">%s</font>',
-			killerColor,
-			escape(tostring(entry.Killer)),
-			how,
-			victimColor,
-			escape(tostring(entry.Victim))
-		)
+		if entry.Killer == "" then
+			-- No killer: they fell off the map.
+			label.Text = string.format(
+				'<font color="%s">%s</font>  <font color="#aaaaaa">fell</font>',
+				victimColor,
+				escape(tostring(entry.Victim))
+			)
+		else
+			label.Text = string.format(
+				'<font color="%s">%s</font>  <font color="#aaaaaa">[%s]</font>  <font color="%s">%s</font>',
+				killerColor,
+				escape(tostring(entry.Killer)),
+				how,
+				victimColor,
+				escape(tostring(entry.Victim))
+			)
+		end
 		label.Parent = frame
 		frame.Parent = list
 

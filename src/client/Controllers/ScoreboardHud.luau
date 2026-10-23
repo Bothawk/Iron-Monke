@@ -4,6 +4,7 @@
 -- attributes the server keeps on each Player.
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
@@ -88,6 +89,17 @@ function ScoreboardHud.Start()
 	layout.Parent = panel
 	panel.Parent = gui
 
+	-- Mode, map and goal above the columns.
+	local title = Instance.new("TextLabel")
+	title.LayoutOrder = -1
+	title.Size = UDim2.new(1, 0, 0, 26)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.TextSize = 16
+	title.TextColor3 = ACCENT
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Parent = panel
+
 	local headerValues = {}
 	for _, column in COLUMNS do
 		table.insert(headerValues, column.Title)
@@ -97,6 +109,15 @@ function ScoreboardHud.Start()
 	local rows: { Frame } = {}
 
 	local function refresh()
+		local match = ReplicatedStorage:FindFirstChild("Match")
+		if match then
+			title.Text = string.format(
+				"%s  ·  %s  ·  FIRST TO %s",
+				tostring(match:GetAttribute("Mode") or ""),
+				tostring(match:GetAttribute("MapName") or ""),
+				tostring(match:GetAttribute("KillTarget") or "")
+			)
+		end
 		for _, row in rows do
 			row:Destroy()
 		end

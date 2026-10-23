@@ -1,12 +1,12 @@
 --!strict
 -- Shooting-range dummies for testing alone: standing targets at set distances,
 -- strafing targets to test lag compensation, and one behind cover that must never
--- be hittable. Only for the test map; real matches won't have these.
+-- be hittable. MapService starts them on the Test Range only.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
-local CombatService = require(script.Parent.CombatService)
+local LagCompensation = require(script.Parent.LagCompensation)
 
 type DummySpec = {
 	Label: string,
@@ -30,7 +30,13 @@ local LOOK_AT = Vector3.new(0, 0, 0) -- dummies face the spawn
 
 local TestDummyService = {}
 
-local function spawnDummy(spec: DummySpec)
+-- Bumped on every Start/Stop so respawn timers from an old map do nothing.
+local generation = 0
+
+local function spawnDummy(spec: DummySpec, parent: Instance, myGeneration: number)
+	if myGeneration ~= generation or not parent.Parent then
+		return
+	end
 	local description = Instance.new("HumanoidDescription")
 	local model = Players:CreateHumanoidModelFromDescription(description, Enum.HumanoidRigType.R15)
 	model.Name = "Dummy"
@@ -47,8 +53,9 @@ local function spawnDummy(spec: DummySpec)
 	local base = spec.Position + Vector3.new(0, standHeight, 0)
 	local facing = Vector3.new(LOOK_AT.X, base.Y, LOOK_AT.Z)
 	model:PivotTo(CFrame.lookAt(base, facing))
-	model.Parent = workspace
-	CombatService.RegisterCombatant(model)
+	model.Parent = parent
+	-- Tracked like a player, so it can be shot.
+	LagCompensation.Track(model)
 
 	local moveConnection: RBXScriptConnection? = nil
 	local distance, speed = spec.StrafeDistance, spec.StrafeSpeed
@@ -58,6 +65,11 @@ local function spawnDummy(spec: DummySpec)
 		local startTime = os.clock()
 		local side = CFrame.lookAt(base, facing).RightVector
 		moveConnection = RunService.Heartbeat:Connect(function()
+			if not model.Parent then
+				-- The map was unloaded.
+				(moveConnection :: RBXScriptConnection):Disconnect()
+				return
+			end
 			if humanoid.Health <= 0 then
 				return
 			end
@@ -72,19 +84,21 @@ local function spawnDummy(spec: DummySpec)
 		end
 		task.delay(RESPAWN_DELAY, function()
 			model:Destroy()
-			spawnDummy(spec)
+			spawnDummy(spec, parent, myGeneration)
 		end)
 	end)
 end
 
-function TestDummyService.Start()
-	local map = workspace:FindFirstChild("Map")
-	if not map or not map:GetAttribute("IsTestMap") then
-		return
-	end
+-- Fills the shooting range. Dummies live inside the map, so unloading it removes them.
+function TestDummyService.Start(map: Instance)
+	generation += 1
 	for _, spec in DUMMIES do
-		task.spawn(spawnDummy, spec)
+		task.spawn(spawnDummy, spec, map, generation)
 	end
+end
+
+function TestDummyService.Stop()
+	generation += 1
 end
 
 return TestDummyService

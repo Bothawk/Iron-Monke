@@ -1,7 +1,14 @@
 # Game design prompt
 
 This is the full design brief. Paste it into an AI coding assistant to keep building the game, one phase at a time.
-Phases 1-4 are already written in this project, so tell the assistant to start from Phase 5 and read the existing code first.
+Phases 1-5 are already written in this project, so tell the assistant to start from Phase 6 and read the existing code first.
+
+Ideas added while building (already in the game):
+- Kill tags decided by the server: HEADSHOT, NOSCOPE, QUICKSCOPE, AIRSHOT, FLOW KILL, LONGSHOT, SLICE, KNIFED.
+- Multi-kill banners: DOUBLE KILL, TRIPLE KILL, RAMPAGE.
+- Scope sway with Shift to hold breath (and a shaky penalty for holding too long).
+- Spawn protection bubble that ends the moment you attack.
+- A Test Range map in the vote rotation, with dummies for practice.
 
 Changes from the first version:
 - Sprint added: hold Left Shift while moving forward. Crouch/slide is C.
@@ -238,7 +245,7 @@ PHASE 1 (DONE): Movement (walk, sprint, jump, bhop, slide, wall kick, Flow meter
 PHASE 2 (DONE): VANTA sniper with ADS, quickscope, hit registration with lag compensation, damage, death/respawn. Checklist: shots never hit through walls they shouldn't, headshots at 200+ studs register at 150 ms ping.
 PHASE 3 (DONE): Feel pass (viewmodel, camera, tracers, impact effects, all sounds including the headshot/kill sounds).
 PHASE 4 (DONE): HUD, killfeed, killcam, scoreboard. Knife.
-PHASE 5: Free-For-All match system and the Cinder Terraces map.
+PHASE 5 (DONE): Free-For-All match system and the Cinder Terraces map.
 PHASE 6: Data saving, coins, the other 4 snipers, the shop, attachments.
 PHASE 7: Menus, settings, mobile and controller support.
 PHASE 8: Robux skins (ProcessReceipt), daily rewards, quests, codes, leaderboards, season pass, badges.

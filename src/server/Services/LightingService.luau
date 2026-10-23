@@ -8,6 +8,19 @@ local Lighting = game:GetService("Lighting")
 
 local LightingService = {}
 
+-- Per-map settings on top of the shared look (see each map's Lighting table).
+export type Preset = {
+	ClockTime: number,
+	Brightness: number,
+	OutdoorAmbient: Color3,
+	AtmosphereColor: Color3,
+	AtmosphereDecay: Color3,
+	AtmosphereDensity: number,
+	AtmosphereHaze: number,
+	Tint: Color3,
+	SunRays: number,
+}
+
 local function ensure(className: string, name: string): Instance
 	local existing = Lighting:FindFirstChild(name)
 	if existing and existing.ClassName == className then
@@ -51,6 +64,21 @@ function LightingService.Start()
 	atmosphere.Decay = Color3.fromRGB(120, 100, 110)
 	atmosphere.Glare = 0.2
 	atmosphere.Haze = 1.2
+end
+
+function LightingService.Apply(preset: Preset)
+	Lighting.ClockTime = preset.ClockTime
+	Lighting.Brightness = preset.Brightness
+	Lighting.OutdoorAmbient = preset.OutdoorAmbient
+	local atmosphere = ensure("Atmosphere", "GameAtmosphere") :: Atmosphere
+	atmosphere.Color = preset.AtmosphereColor
+	atmosphere.Decay = preset.AtmosphereDecay
+	atmosphere.Density = preset.AtmosphereDensity
+	atmosphere.Haze = preset.AtmosphereHaze
+	local color = ensure("ColorCorrectionEffect", "GameColor") :: ColorCorrectionEffect
+	color.TintColor = preset.Tint
+	local rays = ensure("SunRaysEffect", "GameSunRays") :: SunRaysEffect
+	rays.Intensity = preset.SunRays
 end
 
 return LightingService
