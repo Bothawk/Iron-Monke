@@ -195,6 +195,29 @@ local function approach(current: Vector3, target: Vector3, maxDelta: number): Ve
 end
 
 local scoped = false
+local knifeEquipped = false
+local dashVelocity: Vector3? = nil
+local dashEndsAt = -math.huge
+
+-- Knife out: faster on the ground, slower Flow drain, shorter slide cooldown.
+function MovementController.SetKnifeEquipped(equipped: boolean)
+	knifeEquipped = equipped
+end
+
+-- A short burst in a direction (the knife lunge). It ignores the speed cap while
+-- it lasts and keeps the current height.
+function MovementController.Dash(direction: Vector3, distance: number, duration: number)
+	local flatDirection = Vector3.new(direction.X, 0, direction.Z)
+	if flatDirection.Magnitude < 1e-3 then
+		return
+	end
+	dashVelocity = flatDirection.Unit * (distance / duration)
+	dashEndsAt = os.clock() + duration
+end
+
+function MovementController.IsDashing(): boolean
+	return os.clock() < dashEndsAt
+end
 
 -- Called by the weapon while scoped in: walking slows down and sprint is off.
 -- Slides and air movement keep their speed, so scoped bhops still work.
@@ -203,14 +226,15 @@ function MovementController.SetScoped(isScoped: boolean)
 end
 
 local function groundMaxSpeed(): number
+	local multiplier = if knifeEquipped then Config.KnifeSpeedMultiplier else 1
 	if state.Crouching then
-		return math.min(Config.CrouchSpeed, if scoped then Config.ScopedSpeed else math.huge)
+		return math.min(Config.CrouchSpeed, if scoped then Config.ScopedSpeed else math.huge) * multiplier
 	elseif scoped then
 		return Config.ScopedSpeed
 	elseif state.Sprinting then
-		return Config.SprintSpeed
+		return Config.SprintSpeed * multiplier
 	end
-	return Config.WalkSpeed
+	return Config.WalkSpeed * multiplier
 end
 
 local function groundMove(vel: Vector3, wish: Vector3, dt: number): Vector3
@@ -254,7 +278,8 @@ end
 local function startSlide(vel: Vector3, now: number): Vector3
 	state.Sliding = true
 	state.Crouching = false
-	local boosted = now - lastSlideBoostAt >= Config.Slide.BoostCooldown and vel.Magnitude > 1e-3
+	local cooldown = if knifeEquipped then Config.Slide.KnifeBoostCooldown else Config.Slide.BoostCooldown
+	local boosted = now - lastSlideBoostAt >= cooldown and vel.Magnitude > 1e-3
 	if boosted then
 		lastSlideBoostAt = now
 		vel += vel.Unit * Config.Slide.Boost
@@ -444,7 +469,8 @@ local function step(dt: number)
 	elseif state.Grounded and not state.Sliding then
 		groundIdleTime += dt
 		if groundIdleTime > Config.Flow.DrainDelay then
-			state.Flow = math.max(0, state.Flow - Config.Flow.DrainRate * dt)
+			local drain = Config.Flow.DrainRate * (if knifeEquipped then Config.Flow.KnifeDrainMultiplier else 1)
+			state.Flow = math.max(0, state.Flow - drain * dt)
 		end
 	else
 		groundIdleTime = 0
@@ -452,7 +478,11 @@ local function step(dt: number)
 	updateTier()
 
 	local cap = Config.Flow.Tiers[state.Tier].SpeedCap
-	if vel.Magnitude > cap then
+	local dash = dashVelocity
+	if dash and now < dashEndsAt then
+		vel = dash
+	elseif vel.Magnitude > cap then
+		dashVelocity = nil
 		vel = vel.Unit * cap
 	end
 

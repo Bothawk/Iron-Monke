@@ -14,6 +14,9 @@ Net.Names = {
 	ShotResult = "ShotResult", -- server → shooter: confirmed hit
 	TookDamage = "TookDamage", -- server → victim
 	ShotEffect = "ShotEffect", -- server → other clients: tracer to draw
+	Equip = "Equip", -- client → server: slot
+	MeleeHit = "MeleeHit", -- client → server: kind, victim, attackTime
+	KillFeed = "KillFeed", -- server → everyone: who killed whom
 }
 
 local function getFolder(): Instance

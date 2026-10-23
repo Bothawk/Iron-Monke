@@ -161,6 +161,52 @@ function LagCompensation.Raycast(
 	return fallbackPart, fallbackDistance
 end
 
+local function pointBoxDistance(point: Vector3, box: Box): number
+	local localPoint = box.CFrame:PointToObjectSpace(point)
+	local half = box.Size / 2
+	local outside = Vector3.new(
+		math.max(math.abs(localPoint.X) - half.X, 0),
+		math.max(math.abs(localPoint.Y) - half.Y, 0),
+		math.max(math.abs(localPoint.Z) - half.Z, 0)
+	)
+	return outside.Magnitude
+end
+
+-- The closest `model`'s hitboxes came to `point` at any moment between fromTime and
+-- toTime, and where that closest box was. Used for knife reach.
+function LagCompensation.ClosestDistance(
+	model: Model,
+	point: Vector3,
+	fromTime: number,
+	toTime: number
+): (number, Vector3?)
+	local history = histories[model]
+	if not history then
+		return math.huge, nil
+	end
+	local latestTime = if #history > 0 then history[#history].Time else -math.huge
+	local live = capture(model, toTime)
+	local best, bestCenter = math.huge, nil
+
+	local t = fromTime
+	while true do
+		local boxes = if t > latestTime then live.Boxes else poseAt(history, t)
+		if boxes then
+			for _, box in boxes do
+				local distance = pointBoxDistance(point, box)
+				if distance < best then
+					best, bestCenter = distance, box.CFrame.Position
+				end
+			end
+		end
+		if t >= toTime then
+			break
+		end
+		t = math.min(t + Settings.SampleStep, toTime)
+	end
+	return best, bestCenter
+end
+
 function LagCompensation.Start()
 	local interval = 1 / Settings.SnapshotRate
 	local elapsed = 0

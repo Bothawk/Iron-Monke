@@ -286,9 +286,8 @@ function WeaponHud.Start()
 		local viewport = camera.ViewportSize
 
 		-- Crosshair gap matches the real spread cone on screen.
-		local spreadPixels = math.tan(math.rad(weapon.Spread))
-			/ math.tan(math.rad(camera.FieldOfView) / 2)
-			* (viewport.Y / 2)
+		local spread = if weapon.Equipped == "Knife" then 0 else weapon.Spread
+		local spreadPixels = math.tan(math.rad(spread)) / math.tan(math.rad(camera.FieldOfView) / 2) * (viewport.Y / 2)
 		local gap = CROSSHAIR_MIN_GAP + spreadPixels + CROSSHAIR_LENGTH / 2
 		arms[1].Position = UDim2.fromOffset(-gap, 0)
 		arms[2].Position = UDim2.fromOffset(gap, 0)
@@ -318,10 +317,14 @@ function WeaponHud.Start()
 		damageFlash.BackgroundTransparency = math.clamp(0.75 + damageAge * 0.25, 0.75, 1)
 
 		local weaponStats = WeaponConfig.Weapons[weapon.WeaponId]
-		weaponName.Text = weaponStats.DisplayName
-		ammoText.Text = if weapon.Reloading then "RELOADING" else `{weapon.Ammo} / {weaponStats.MagSize}`
-		ammoText.TextSize = if weapon.Reloading then 24 else 40
-		reloadBack.Visible = weapon.Reloading
+		local knifeOut = weapon.Equipped == "Knife"
+		weaponName.Text = if knifeOut then WeaponConfig.Knife.DisplayName else weaponStats.DisplayName
+		ammoText.Text = if knifeOut
+			then "∞"
+			elseif weapon.Reloading then "RELOADING"
+			else `{weapon.Ammo} / {weaponStats.MagSize}`
+		ammoText.TextSize = if weapon.Reloading and not knifeOut then 24 else 40
+		reloadBack.Visible = weapon.Reloading and not knifeOut
 		reloadFill.Size = UDim2.fromScale(weapon.ReloadProgress, 1)
 
 		local character = player.Character

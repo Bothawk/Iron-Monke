@@ -37,6 +37,7 @@ local MovementConfig = {
 		MinSpeed = 16,
 		Boost = 6,
 		BoostCooldown = 0.8,
+		KnifeBoostCooldown = 0.6,
 		Friction = 9, -- speed lost per second while sliding on flat ground
 		EndSpeed = 10, -- the slide ends below this speed
 		SteerRate = 1.5, -- radians per second the slide can turn toward your input
@@ -70,6 +71,7 @@ local MovementConfig = {
 		HitPenalty = 30, -- used in phase 2
 		DrainDelay = 0.4, -- grounded and not sliding for this long starts draining
 		DrainRate = 40,
+		KnifeDrainMultiplier = 0.5, -- Flow drains half as fast with the knife out
 		OverflowDuration = 4,
 		OverflowExitValue = 70, -- Flow drops to this when Overflow ends
 		-- Tier 4 (Overflow) is only reached by filling the meter to Max.

@@ -9,6 +9,7 @@ local SoundService = game:GetService("SoundService")
 
 local Net = require(ReplicatedStorage.Shared.Net)
 local SoundConfig = require(ReplicatedStorage.Shared.Config.SoundConfig)
+local KnifeController = require(script.Parent.KnifeController)
 local MovementController = require(script.Parent.MovementController)
 local WeaponController = require(script.Parent.WeaponController)
 
@@ -159,12 +160,21 @@ function SoundController.Start()
 		end
 	end)
 	WeaponController.Killed:Connect(function(result: any)
+		if table.find(result.Tags, "SLICE") or table.find(result.Tags, "KNIFED") then
+			SoundController.Play("Slice", "Hits")
+		end
 		if table.find(result.Tags, "FLOW KILL") then
 			SoundController.Play("FlowKill", "Hits")
 		end
 	end)
 	WeaponController.Damaged:Connect(function()
 		SoundController.Play("Damaged")
+	end)
+	WeaponController.EquipChanged:Connect(function()
+		SoundController.Play("Equip")
+	end)
+	KnifeController.Swung:Connect(function(kind: string)
+		SoundController.Play(if kind == "Lunge" then "KnifeLunge" else "KnifeSwing")
 	end)
 
 	MovementController.Jumped:Connect(function(kind: string)

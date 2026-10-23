@@ -1,6 +1,6 @@
 --!strict
--- The first-person sniper and arms, built from parts so it needs no uploaded model.
--- Colors come from a palette, so skins (phase 8) only swap the palette.
+-- First-person weapons (sniper or knife) and arms, built from parts so they need no
+-- uploaded model. Colors come from a palette, so skins (phase 8) only swap the palette.
 
 export type Palette = {
 	Primary: Color3,
@@ -21,8 +21,12 @@ type PartSpec = {
 	MovesWithBolt: boolean?,
 }
 
+export type Kind = "Sniper" | "Knife"
+
 export type Pose = {
 	AdsAlpha: number, -- 0 = hip, 1 = scoped
+	Lower: number, -- 0 = held, 1 = dropped out of view (while switching weapons)
+	Extra: CFrame?, -- extra motion on top, like a knife swing
 	KickBack: number, -- studs pushed back by recoil
 	KickPitch: number, -- radians tipped up by recoil
 	Dip: number, -- radians tipped down (bolting, reloading)
@@ -55,7 +59,7 @@ local LEFT_ELBOW = Vector3.new(-0.7, -0.95, -0.15)
 local rightArmSize, rightArmOffset = limb(RIGHT_ELBOW, RIGHT_HAND)
 local leftArmSize, leftArmOffset = limb(LEFT_ELBOW, LEFT_HAND)
 
-local PARTS: { PartSpec } = {
+local SNIPER_PARTS: { PartSpec } = {
 	-- Receiver and chassis
 	{ Name = "Body", Size = Vector3.new(0.26, 0.3, 1.9), Offset = CFrame.new(0, 0, 0), Role = "Primary" },
 	{ Name = "Chassis", Size = Vector3.new(0.22, 0.12, 1.4), Offset = CFrame.new(0, -0.2, -0.2), Role = "Secondary" },
@@ -165,10 +169,52 @@ local PARTS: { PartSpec } = {
 	{ Name = "LeftHand", Size = Vector3.new(0.32, 0.26, 0.34), Offset = CFrame.new(LEFT_HAND), Role = "Skin" },
 }
 
-local MUZZLE_OFFSET = CFrame.new(0, 0.06, -3.05)
+-- Knife held in the right hand, blade forward and slightly up.
+local KNIFE_HAND = Vector3.new(0, -0.05, 0.35)
+local KNIFE_ELBOW = Vector3.new(0.35, -0.7, 1.9)
+local knifeArmSize, knifeArmOffset = limb(KNIFE_ELBOW, KNIFE_HAND)
+
+local KNIFE_PARTS: { PartSpec } = {
+	{
+		Name = "Blade",
+		Size = Vector3.new(0.04, 0.2, 0.9),
+		Offset = CFrame.new(0, 0.02, -0.55),
+		Role = "Accent",
+		Material = Enum.Material.Metal,
+	},
+	{
+		Name = "Edge",
+		Size = Vector3.new(0.045, 0.04, 0.85),
+		Offset = CFrame.new(0, -0.07, -0.55),
+		Role = "Accent",
+		Material = Enum.Material.Neon,
+	},
+	{ Name = "Guard", Size = Vector3.new(0.1, 0.32, 0.06), Offset = CFrame.new(0, 0, -0.08), Role = "Secondary" },
+	{ Name = "Handle", Size = Vector3.new(0.12, 0.16, 0.45), Offset = CFrame.new(0, 0, 0.18), Role = "Primary" },
+	{ Name = "Pommel", Size = Vector3.new(0.14, 0.18, 0.06), Offset = CFrame.new(0, 0, 0.43), Role = "Secondary" },
+	{ Name = "RightArm", Size = knifeArmSize, Offset = knifeArmOffset, Role = "Sleeve" },
+	{ Name = "RightHand", Size = Vector3.new(0.3, 0.32, 0.34), Offset = CFrame.new(KNIFE_HAND), Role = "Skin" },
+}
+
+type KindSpec = { Parts: { PartSpec }, Hip: CFrame, Ads: CFrame, Muzzle: CFrame }
+
+local KINDS: { [Kind]: KindSpec } = {
+	Sniper = {
+		Parts = SNIPER_PARTS,
+		Hip = CFrame.new(0.75, -0.75, -1.7),
+		Ads = CFrame.new(0, -SCOPE_HEIGHT, -1.1),
+		Muzzle = CFrame.new(0, 0.06, -3.05),
+	},
+	Knife = {
+		Parts = KNIFE_PARTS,
+		Hip = CFrame.new(0.85, -0.8, -1.5) * CFrame.Angles(math.rad(10), math.rad(8), math.rad(-20)),
+		Ads = CFrame.new(0.85, -0.8, -1.5),
+		Muzzle = CFrame.new(0, 0, -1),
+	},
+}
+
 local BOLT_TRAVEL = 0.3
-local HIP_OFFSET = CFrame.new(0.75, -0.75, -1.7)
-local ADS_OFFSET = CFrame.new(0, -SCOPE_HEIGHT, -1.1)
+local LOWER_OFFSET = CFrame.new(0, -1.6, 0.4) * CFrame.Angles(math.rad(-40), 0, 0)
 
 local Viewmodel = {}
 Viewmodel.__index = Viewmodel
@@ -176,6 +222,7 @@ Viewmodel.__index = Viewmodel
 export type Viewmodel = typeof(setmetatable(
 	{} :: {
 		Model: Model,
+		Spec: KindSpec,
 		Parts: { BasePart },
 		Handle: CFrame,
 		Visible: boolean,
@@ -185,11 +232,12 @@ export type Viewmodel = typeof(setmetatable(
 	Viewmodel
 ))
 
-function Viewmodel.new(): Viewmodel
+function Viewmodel.new(kind: Kind): Viewmodel
+	local kindSpec = KINDS[kind]
 	local model = Instance.new("Model")
-	model.Name = "Viewmodel"
+	model.Name = `{kind}Viewmodel`
 	local parts = {}
-	for _, spec in PARTS do
+	for _, spec in kindSpec.Parts do
 		local part = Instance.new("Part")
 		part.Name = spec.Name
 		part.Size = spec.Size
@@ -204,6 +252,7 @@ function Viewmodel.new(): Viewmodel
 	end
 	local self = setmetatable({
 		Model = model,
+		Spec = kindSpec,
 		Parts = parts,
 		Handle = CFrame.identity,
 		Visible = true,
@@ -216,7 +265,7 @@ end
 
 function Viewmodel.ApplyColors(self: Viewmodel)
 	local palette = self.Palette
-	for i, spec in PARTS do
+	for i, spec in self.Spec.Parts do
 		local part = self.Parts[i]
 		local role = spec.Role
 		part.Color = if role == "Primary"
@@ -263,22 +312,27 @@ function Viewmodel.Update(self: Viewmodel, camera: Camera, pose: Pose)
 		self.Model.Parent = camera
 	end
 
-	local offset = HIP_OFFSET:Lerp(ADS_OFFSET, easeOut(pose.AdsAlpha))
+	local spec = self.Spec
+	local offset = spec.Hip:Lerp(spec.Ads, easeOut(pose.AdsAlpha))
+		* CFrame.identity:Lerp(LOWER_OFFSET, pose.Lower)
 		* CFrame.new(pose.Bob.X, pose.Bob.Y, pose.KickBack)
 		* CFrame.Angles(pose.KickPitch - pose.Dip + pose.Sway.Y, pose.Sway.X, 0)
+		* (pose.Extra or CFrame.identity)
 	self.Handle = camera.CFrame * offset
 
 	local boltOffset = CFrame.new(0, 0, pose.BoltPull * BOLT_TRAVEL)
-	local cframes = table.create(#PARTS)
-	for i, spec in PARTS do
-		local partCFrame = self.Handle * spec.Offset
-		cframes[i] = if spec.MovesWithBolt then self.Handle * boltOffset * spec.Offset else partCFrame
+	local parts = spec.Parts
+	local cframes = table.create(#parts)
+	for i, partSpec in parts do
+		cframes[i] = if partSpec.MovesWithBolt
+			then self.Handle * boltOffset * partSpec.Offset
+			else self.Handle * partSpec.Offset
 	end
 	workspace:BulkMoveTo(self.Parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
 end
 
 function Viewmodel.GetMuzzlePosition(self: Viewmodel): Vector3
-	return (self.Handle * MUZZLE_OFFSET).Position
+	return (self.Handle * self.Spec.Muzzle).Position
 end
 
 return Viewmodel

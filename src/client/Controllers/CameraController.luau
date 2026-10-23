@@ -48,7 +48,8 @@ function CameraController.Start()
 		local camera = workspace.CurrentCamera
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if not camera or not humanoid then
+		-- The death cam takes over the camera (Scriptable) while dead.
+		if not camera or not humanoid or camera.CameraType ~= Enum.CameraType.Custom then
 			return
 		end
 

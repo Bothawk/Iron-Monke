@@ -1,7 +1,8 @@
 --!strict
--- Gives every character a sniper other players can see, welded to the right hand.
--- Clients raise the arms into an aiming pose (CharacterPoseController), and the
--- owner hides their own copy since they see the first-person one instead.
+-- Gives every character a sniper and a knife other players can see, welded to the
+-- right hand, showing whichever is equipped. Clients pose the arms to match
+-- (CharacterPoseController), and the owner hides their own copy since they see the
+-- first-person one instead.
 
 local Players = game:GetService("Players")
 
@@ -24,6 +25,11 @@ local PARTS: { PartSpec } = {
 	{ Name = "Mag", Size = Vector3.new(0.17, 0.34, 0.32), Offset = Vector3.new(0, -0.32, -0.3), Color = SECONDARY },
 }
 local GRIP_OFFSET = Vector3.new(0, -0.3, 0.55)
+
+local KNIFE_PARTS: { PartSpec } = {
+	{ Name = "Blade", Size = Vector3.new(0.04, 0.2, 0.9), Offset = Vector3.new(0, 0.02, -0.55), Color = ACCENT },
+	{ Name = "Guard", Size = Vector3.new(0.1, 0.32, 0.06), Offset = Vector3.new(0, 0, -0.08), Color = SECONDARY },
+}
 
 local function makePart(name: string, size: Vector3, color: Color3): Part
 	local part = Instance.new("Part")
@@ -56,19 +62,54 @@ local function attach(character: Model)
 
 	local model = Instance.new("Model")
 	model.Name = "WorldWeapon"
+
+	-- The arm points the hand's -Y forward when aiming, so turn the weapon's
+	-- forward (-Z) to match, with the grip sitting in the palm.
+	local handGrip = CFrame.new(0, -hand.Size.Y * 0.3, 0) * CFrame.Angles(math.rad(-90), 0, 0)
+
+	local sniper = Instance.new("Model")
+	sniper.Name = "Sniper"
 	local body = makePart("Body", Vector3.new(0.26, 0.3, 1.9), PRIMARY)
-	body.Parent = model
+	body.Parent = sniper
 	for _, spec in PARTS do
 		local part = makePart(spec.Name, spec.Size, spec.Color)
 		weld(body, part, CFrame.new(spec.Offset * SCALE), CFrame.identity)
-		part.Parent = model
+		part.Parent = sniper
 	end
-
-	-- The arm points the hand's -Y forward when aiming, so turn the barrel (-Z) to match,
-	-- with the grip sitting in the palm.
-	local handGrip = CFrame.new(0, -hand.Size.Y * 0.3, 0) * CFrame.Angles(math.rad(-90), 0, 0)
 	weld(hand, body, handGrip, CFrame.new(GRIP_OFFSET * SCALE))
+	sniper.Parent = model
+
+	local knife = Instance.new("Model")
+	knife.Name = "Knife"
+	local handle = makePart("Handle", Vector3.new(0.12, 0.16, 0.45), SECONDARY)
+	handle.Parent = knife
+	for _, spec in KNIFE_PARTS do
+		local part = makePart(spec.Name, spec.Size, spec.Color)
+		weld(handle, part, CFrame.new(spec.Offset * SCALE), CFrame.identity)
+		part.Parent = knife
+	end
+	weld(hand, handle, handGrip, CFrame.identity)
+	knife.Parent = model
+
 	model.Parent = character
+	WorldWeaponService.SetEquipped(character, "Sniper")
+end
+
+-- Shows the equipped weapon and tells clients which arm pose to use.
+function WorldWeaponService.SetEquipped(character: Model, slot: string)
+	character:SetAttribute("Equipped", slot)
+	local model = character:FindFirstChild("WorldWeapon")
+	if not model then
+		return
+	end
+	for _, weapon in model:GetChildren() do
+		local shown = weapon.Name == slot
+		for _, part in weapon:GetDescendants() do
+			if part:IsA("BasePart") then
+				part.Transparency = if shown then 0 else 1
+			end
+		end
+	end
 end
 
 function WorldWeaponService.Start()

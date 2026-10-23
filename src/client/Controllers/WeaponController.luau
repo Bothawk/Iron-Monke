@@ -2,6 +2,7 @@
 -- The client side of the sniper: scoping, quickscopes, scope sway and Shift to
 -- steady, firing, bolt and reload, recoil and viewmodel motion. Shots raycast here
 -- for instant feedback, then the server re-checks them before any damage happens.
+-- Also owns which weapon is equipped; the knife itself lives in KnifeController.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,6 +28,9 @@ local RELOAD_KEYS = { Enum.KeyCode.R, Enum.KeyCode.ButtonX }
 local SCOPE_BUTTON = Enum.KeyCode.ButtonL2
 local STEADY_KEYS = { Enum.KeyCode.LeftShift }
 local STEADY_BUTTONS = { Enum.KeyCode.ButtonL3 }
+local SNIPER_KEYS = { Enum.KeyCode.One }
+local KNIFE_KEYS = { Enum.KeyCode.Three }
+local TOGGLE_KEYS = { Enum.KeyCode.Q, Enum.KeyCode.ButtonY }
 
 local KICK_BACK = 0.35 -- studs
 local KICK_PITCH = math.rad(6)
@@ -37,6 +41,8 @@ local SWAY_LIMIT = math.rad(5)
 local BOB_AMOUNT = 0.035
 local BOB_SPEED = 0.55 -- bob cycles per stud travelled
 local SCOPING_ZOOM = 1.12 -- slight zoom while the scope is still coming up
+
+export type Slot = "Sniper" | "Knife"
 
 export type ShotInfo = {
 	Origin: Vector3,
@@ -59,6 +65,8 @@ WeaponController.State = {
 	Scoped = false,
 	Spread = WeaponConfig.HipfireSpread,
 	Alive = false,
+	Equipped = "Sniper" :: Slot,
+	SwitchProgress = 1, -- 0..1 through the current weapon switch; 1 = done
 	AimSway = Vector2.zero, -- radians (yaw, pitch) the scoped view drifts; shots follow it
 	Steadying = false,
 	SteadyRemaining = WeaponConfig.Sway.SteadyDuration,
@@ -73,17 +81,19 @@ WeaponController.ReloadStarted = Signal.new()
 WeaponController.ReloadFinished = Signal.new()
 WeaponController.ScopedIn = Signal.new()
 WeaponController.BoltFinished = Signal.new()
+WeaponController.EquipChanged = Signal.new() -- (slot: Slot)
 
 local state = WeaponController.State
 local Sway = WeaponConfig.Sway
 
 local fireShot = Net.Event(Net.Names.FireShot)
 local reloadEvent = Net.Event(Net.Names.Reload)
+local equipEvent = Net.Event(Net.Names.Equip)
 local shotResult = Net.Event(Net.Names.ShotResult)
 local tookDamage = Net.Event(Net.Names.TookDamage)
 
 local random = Random.new()
-local viewmodel = Viewmodel.new()
+local viewmodel = Viewmodel.new("Sniper")
 local character: Model? = nil
 
 local boltStartedAt = -math.huge
@@ -92,6 +102,8 @@ local reloadStartedAt = -math.huge
 local reloadEndsAt = -math.huge
 local scopedAt = -math.huge -- when the scope last finished coming up
 local exhaustedUntil = -math.huge -- after holding breath too long, steadying is locked out
+local switchStartedAt = -math.huge
+local previousSlot: Slot = "Sniper"
 
 local kickBack = Spring.new(0, 220, 0.75)
 local kickPitch = Spring.new(0, 220, 0.75)
@@ -186,6 +198,39 @@ local function getVictim(part: BasePart): (Model?, string?)
 	return model, if torso then torso.Name else nil
 end
 
+local function sniperReady(): boolean
+	return state.Alive and state.Equipped == "Sniper" and state.SwitchProgress >= 1
+end
+
+-- How far a weapon's viewmodel is lowered: the old one drops out during the first
+-- half of a switch and the new one comes up during the second half.
+function WeaponController.GetLower(slot: Slot): number
+	local progress = state.SwitchProgress
+	if progress >= 1 then
+		return if slot == state.Equipped then 0 else 1
+	end
+	if slot == state.Equipped then
+		return if progress < 0.5 then 1 else 1 - (progress - 0.5) * 2
+	elseif slot == previousSlot then
+		return if progress < 0.5 then progress * 2 else 1
+	end
+	return 1
+end
+
+function WeaponController.Equip(slot: Slot)
+	if slot == state.Equipped or not state.Alive then
+		return
+	end
+	previousSlot = state.Equipped
+	state.Equipped = slot
+	switchStartedAt = os.clock()
+	state.SwitchProgress = 0
+	state.AdsAlpha = 0
+	equipEvent:FireServer(slot)
+	MovementController.SetKnifeEquipped(slot == "Knife")
+	WeaponController.EquipChanged:Fire(slot)
+end
+
 local function isAlive(): boolean
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	return humanoid ~= nil and humanoid.Health > 0
@@ -193,7 +238,7 @@ end
 
 local function startReload()
 	local now = os.clock()
-	if not state.Alive or state.Reloading or state.Ammo >= weapon().MagSize or now < boltEndsAt then
+	if not sniperReady() or state.Reloading or state.Ammo >= weapon().MagSize or now < boltEndsAt then
 		return
 	end
 	state.Reloading = true
@@ -205,7 +250,7 @@ end
 
 local function fire()
 	local now = os.clock()
-	if not state.Alive or state.Reloading or now < boltEndsAt then
+	if not sniperReady() or state.Reloading or now < boltEndsAt then
 		return
 	end
 	if state.Ammo <= 0 then
@@ -273,7 +318,7 @@ end
 
 local function updateAds(dt: number, now: number)
 	local wasScoped = state.Scoped
-	local canScope = state.Alive and not state.Reloading and now >= boltEndsAt
+	local canScope = sniperReady() and not state.Reloading and now >= boltEndsAt
 	if canScope and isScopeHeld() then
 		state.AdsAlpha = math.min(1, state.AdsAlpha + dt / weapon().AdsTime)
 	else
@@ -349,6 +394,7 @@ local function updateTimers(now: number)
 		boltStartedAt = -math.huge
 		WeaponController.BoltFinished:Fire()
 	end
+	state.SwitchProgress = math.clamp((now - switchStartedAt) / WeaponConfig.Knife.SwitchTime, 0, 1)
 	-- Krunker-style: an empty mag reloads by itself once the bolt is done.
 	if state.Ammo <= 0 and not state.Reloading and now >= boltEndsAt then
 		startReload()
@@ -386,9 +432,11 @@ local function updateViewmodel(dt: number, now: number)
 	local boltCurve = if bolting then math.sin(boltProgress * math.pi) else 0
 	local reloadCurve = if state.Reloading then math.sin(state.ReloadProgress * math.pi) else 0
 
-	viewmodel:SetVisible(state.Alive and not state.Scoped)
+	local lower = WeaponController.GetLower("Sniper")
+	viewmodel:SetVisible(state.Alive and not state.Scoped and lower < 1)
 	viewmodel:Update(camera, {
 		AdsAlpha = state.AdsAlpha,
+		Lower = lower,
 		KickBack = kickBack:Update(dt),
 		KickPitch = kickPitch:Update(dt),
 		Dip = boltCurve * BOLT_DIP + reloadCurve * RELOAD_DIP,
@@ -405,7 +453,7 @@ local function hideOwnWorldWeapon()
 	if not worldWeapon then
 		return
 	end
-	for _, part in worldWeapon:GetChildren() do
+	for _, part in worldWeapon:GetDescendants() do
 		if part:IsA("BasePart") then
 			part.LocalTransparencyModifier = 1
 		end
@@ -420,6 +468,11 @@ local function onCharacterAdded(newCharacter: Model)
 	state.Scoped = false
 	state.HeadshotStreak = 0
 	state.SteadyRemaining = Sway.SteadyDuration
+	-- Every life starts with the sniper out.
+	state.Equipped = "Sniper"
+	state.SwitchProgress = 1
+	previousSlot = "Sniper"
+	MovementController.SetKnifeEquipped(false)
 	boltStartedAt = -math.huge
 	boltEndsAt = -math.huge
 	reloadEndsAt = -math.huge
@@ -444,10 +497,17 @@ function WeaponController.Start()
 		if gameProcessed then
 			return
 		end
-		if table.find(FIRE_INPUTS, input.UserInputType) or table.find(FIRE_BUTTONS, input.KeyCode) then
+		local key = input.KeyCode
+		if table.find(FIRE_INPUTS, input.UserInputType) or table.find(FIRE_BUTTONS, key) then
 			fire()
-		elseif table.find(RELOAD_KEYS, input.KeyCode) then
+		elseif table.find(RELOAD_KEYS, key) then
 			startReload()
+		elseif table.find(SNIPER_KEYS, key) then
+			WeaponController.Equip("Sniper")
+		elseif table.find(KNIFE_KEYS, key) then
+			WeaponController.Equip("Knife")
+		elseif table.find(TOGGLE_KEYS, key) then
+			WeaponController.Equip(if state.Equipped == "Sniper" then "Knife" else "Sniper")
 		end
 	end)
 

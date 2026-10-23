@@ -1,7 +1,7 @@
 --!strict
 -- Labels a kill for the banner and kill feed: HEADSHOT, NOSCOPE, QUICKSCOPE,
--- AIRSHOT, FLOW KILL, LONGSHOT, SLICE. The server works these out so everyone sees
--- the same tags.
+-- AIRSHOT, FLOW KILL, LONGSHOT, SLICE (knife lunge), KNIFED (knife slash). The
+-- server works these out so everyone sees the same tags.
 
 export type ShotContext = {
 	AdsAlpha: number, -- 0..1 how far the scope was up
@@ -33,14 +33,18 @@ function KillTags.Sanitize(raw: any): ShotContext?
 	}
 end
 
+-- weaponKind is "Sniper", "Slash" or "Lunge".
 function KillTags.Compute(weaponKind: string, zone: string, distance: number, context: ShotContext?): { string }
 	local tags = {}
-	if weaponKind == "Knife" then
+	local melee = weaponKind == "Slash" or weaponKind == "Lunge"
+	if weaponKind == "Lunge" then
 		table.insert(tags, "SLICE")
+	elseif weaponKind == "Slash" then
+		table.insert(tags, "KNIFED")
 	elseif zone == "Head" then
 		table.insert(tags, "HEADSHOT")
 	end
-	if context and weaponKind ~= "Knife" then
+	if context and not melee then
 		if context.AdsAlpha < NOSCOPE_MAX_ADS then
 			table.insert(tags, "NOSCOPE")
 		elseif context.AdsAlpha >= 1 and context.ScopedFor <= QUICKSCOPE_WINDOW then
@@ -53,7 +57,7 @@ function KillTags.Compute(weaponKind: string, zone: string, distance: number, co
 	if context and context.Overflow then
 		table.insert(tags, "FLOW KILL")
 	end
-	if distance >= LONGSHOT_DISTANCE then
+	if not melee and distance >= LONGSHOT_DISTANCE then
 		table.insert(tags, "LONGSHOT")
 	end
 	return tags

@@ -30,6 +30,14 @@ local WeaponConfig = {
 	Weapons = Weapons,
 	DefaultWeapon = "Vanta",
 
+	Knife = {
+		DisplayName = "KNIFE",
+		SwitchTime = 0.2, -- swapping between sniper and knife
+		Slash = { Damage = 50, Range = 5, Cooldown = 0.35, Radius = 1.2 },
+		-- Dashes forward and hits the first enemy it reaches.
+		Lunge = { Damage = 100, DashDistance = 10, DashTime = 0.18, HitRange = 3.5, Cooldown = 1.2, Radius = 1.4 },
+	},
+
 	MaxHealth = 100,
 	LimbMultiplier = 0.75, -- limbs take body damage × this
 	MaxRange = 2000,
@@ -77,6 +85,8 @@ local WeaponConfig = {
 		FutureTolerance = 0.05, -- how far ahead of the server clock a timestamp may be
 		MaxShotsPerSecond = 15, -- hard cap before shots are dropped
 		MaxReloadsPerSecond = 5,
+		MeleeRangeTolerance = 2.5, -- extra reach allowed for lag on knife hits
+		MaxEquipsPerSecond = 8,
 	},
 }
 

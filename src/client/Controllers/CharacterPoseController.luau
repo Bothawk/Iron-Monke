@@ -1,7 +1,8 @@
 --!strict
--- Raises every other player's arms into a rifle-aiming pose. There are no uploaded
--- animations yet, so the shoulder joints are turned directly each frame, after
--- Roblox's own animations have run. It only changes what this player sees.
+-- Poses every other player's arms to hold their weapon: both arms up for the
+-- sniper, the right arm forward for the knife. There are no uploaded animations
+-- yet, so the shoulder joints are turned directly each frame, after Roblox's own
+-- animations have run. It only changes what this player sees.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -12,6 +13,7 @@ local player = Players.LocalPlayer
 -- brings each hand in toward the gun.
 local RIGHT_SHOULDER_POSE = CFrame.Angles(0, math.rad(12), 0) * CFrame.Angles(math.rad(90), 0, 0)
 local LEFT_SHOULDER_POSE = CFrame.Angles(0, math.rad(-38), 0) * CFrame.Angles(math.rad(90), 0, 0)
+local KNIFE_SHOULDER_POSE = CFrame.Angles(0, math.rad(8), 0) * CFrame.Angles(math.rad(55), 0, 0)
 
 local CharacterPoseController = {}
 
@@ -61,8 +63,13 @@ function CharacterPoseController.Start()
 			end
 			local humanoid = character:FindFirstChildOfClass("Humanoid")
 			if humanoid and humanoid.Health > 0 then
-				rig.Right.Transform = RIGHT_SHOULDER_POSE
-				rig.Left.Transform = LEFT_SHOULDER_POSE
+				if character:GetAttribute("Equipped") == "Knife" then
+					-- The left arm keeps its normal animation.
+					rig.Right.Transform = KNIFE_SHOULDER_POSE
+				else
+					rig.Right.Transform = RIGHT_SHOULDER_POSE
+					rig.Left.Transform = LEFT_SHOULDER_POSE
+				end
 			end
 		end
 	end)

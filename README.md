@@ -3,8 +3,8 @@
 A fast, sniper-only Roblox FPS with Krunker-style quickscoping and movement that builds momentum.
 The full design is in [docs/GAME_PROMPT.md](docs/GAME_PROMPT.md).
 
-**Status: Phase 1 (movement) and Phase 2 (the VANTA sniper) are written but haven't been played yet.** Next step is
-testing them in Roblox Studio.
+**Status: Phases 1–4 are written but haven't been played yet:** movement, the VANTA sniper, the feel pass (sounds,
+effects, gun model) and the knife, kill feed, scoreboard and death cam. Next step is testing them in Roblox Studio.
 
 ---
 
@@ -49,6 +49,11 @@ Leave VS Code and Rojo running while you work. Every file you save in VS Code up
 | Shoot | Left click | Right trigger |
 | Scope (hold) | Right click | Left trigger |
 | Reload | R | X |
+| Steady scope (hold, while scoped) | Left Shift | Click left stick |
+| Sniper / knife | 1 / 3, or Q to swap | Y to swap |
+| Knife slash / lunge | Left click / right click | Right trigger / left trigger |
+| Scoreboard (hold) | Tab | View / Back |
+| Debug info | F3 | |
 
 Phone and tablet touch controls come in phase 7.
 
@@ -62,9 +67,10 @@ Phone and tablet touch controls come in phase 7.
   Jumping out of a slide keeps all its speed. Sprint → slide → jump is the fastest way to start a chain.
 - **Wall kick:** press jump in the air next to a wall to bounce off it. You get 2 before you have to land.
 - **Slingshot:** slide into the ramp with the orange stripe to launch up.
-- **Flow:** the bar at the bottom of the screen. Perfect hops, slide-jumps and wall kicks fill it, and each tier
-  raises your top speed (30 → 36 → 42). Filling it completely starts **Overflow**: top speed 48 for 4 seconds.
-  Standing around on the ground drains it.
+- **Flow:** the ring of dots around your crosshair. Perfect hops, slide-jumps, wall kicks and air kills fill it,
+  and each tier raises your top speed (30 → 36 → 42) and adds speed lines at the screen edges. Filling it
+  completely starts **Overflow**: top speed 48 for 4 seconds, with the ring glowing. Standing around on the
+  ground drains it, and getting hit takes some away.
 
 ## How the sniper works
 
@@ -75,9 +81,27 @@ Phone and tablet touch controls come in phase 7.
 - **After each shot** you unscope while the bolt cycles. Keep holding right click to scope back in automatically.
 - **Scoped movement:** walking is slower while scoped, but slides and bhops keep their speed, so you can scope
   mid-air.
+- **Scope sway:** the scoped crosshair drifts a little, most right after scoping in and while moving fast. Hold
+  Shift to steady it for up to 2 seconds; hold too long and it gets shaky for a moment.
+- **Kill tags:** kills can be tagged HEADSHOT, NOSCOPE (barely scoped), QUICKSCOPE (fired within 0.25 s of the
+  scope finishing), AIRSHOT, FLOW KILL (during Overflow) and LONGSHOT (200+ studs). Quick kills chain into
+  DOUBLE KILL, TRIPLE KILL and RAMPAGE.
 - **Health** comes back 5 seconds after you last took damage. You respawn 4 seconds after dying.
 - **Hit registration:** your game checks the hit instantly (hitmarker shows right away), then the server re-checks
   it, rewinding the target to where you saw them. Kills only count once the server agrees.
+
+## How the knife works
+
+- Press **3** or **Q**. You move 15% faster with it out, Flow drains half as fast, and slide boosts come back
+  sooner. Swapping takes 0.2 s.
+- **Slash** (left click): 50 damage, short reach, every 0.35 s.
+- **Lunge** (right click): dash 10 studs forward and hit the first enemy you reach for 100 damage (a **SLICE**).
+  1.2 s cooldown.
+
+## After you die
+
+The **death cam** flies to just behind whoever killed you, looking back at where you fell, and shows their name,
+their health, the weapon, the distance and the kill tags. You respawn after 4 seconds.
 
 ## Phase 1 test checklist (movement)
 
@@ -122,6 +146,19 @@ speed), and one behind a wall.
 - [ ] Walking slows down while scoped, sprint turns off, and slide/bhop speed is kept.
 - [ ] Scoped mouse movement feels the same on screen as unscoped (not 4× faster).
 
+## Phase 3–4 test checklist (feel, knife, HUD)
+
+- [ ] The sniper has arms holding it, and the bolt handle moves back after each shot.
+- [ ] Every action has a sound: shot, bolt, reload, scope in, hits, headshots (pitch rises on a headshot streak),
+      kills, jumps, slides, wall kicks, Slingshot, Overflow. Faster movement adds wind.
+- [ ] Shots leave sparks on metal, dust on everything else, and a bullet hole that fades after ~6 s.
+- [ ] Scope sway is visible but small; holding Shift steadies it.
+- [ ] The Flow ring fills and changes color; speed lines appear at tier 1+; the ring glows in Overflow.
+- [ ] Kill banners show tags (try a noscope, a quickscope and a mid-air kill on the dummies).
+- [ ] Q swaps to the knife and back smoothly. Slash and lunge both hit the 50-stud dummy if you walk up to it.
+- [ ] With 2 players: you see the other player's gun (or knife) in their hands, the kill feed shows kills for
+      everyone, Tab shows the scoreboard, and dying shows the death cam.
+
 To test against a real player and lag: in Studio, go to the **Test** tab, set **Clients** to 2, and click
 **Start**. Studio's network settings (File → Studio Settings → Network → Incoming Replication Lag) can add fake
 lag; try 0.15 to check shots still register.
@@ -132,10 +169,11 @@ one, save, and press Play again.
 ### Known limitations (planned for later phases)
 
 - Crouching and sliding lower the camera but not your hitbox yet.
-- The sniper is made of plain blocks, and there are no sounds or hit effects yet. Phase 3 adds the real model,
-  sounds (including the headshot sound), tracers polish and impact effects.
-- No kill feed, scoreboard or killcam yet (phase 4).
-- Other players see the default Roblox animations and no gun in your hands yet (phase 3).
+- Sounds are placeholders built from Roblox's built-in sounds. Swap in real ones in
+  `src/shared/Config/SoundConfig.luau` (instructions at the top of that file).
+- Other players see default Roblox animations with the arms posed to hold the weapon. Real animations need to be
+  made in Roblox's animation editor and uploaded.
+- The death cam shows the killer live rather than a true replay.
 - No touch controls yet (phase 7).
 
 ---
@@ -148,31 +186,44 @@ docs/GAME_PROMPT.md           the full design brief
 src/shared/                   → ReplicatedStorage.Shared (used by client and server)
   Config/MovementConfig.luau  every movement number
   Config/WeaponConfig.luau    every weapon and combat number
+  Config/SoundConfig.luau     every sound (placeholders to swap)
   Combat/Hitboxes.luau        which body parts are head, body or limb
+  Combat/KillTags.luau        HEADSHOT, NOSCOPE, QUICKSCOPE and other kill tags
   Net.luau                    the RemoteEvents client and server talk through
   Util/Spring.luau            smooth spring math for the camera and gun
+  Util/Signal.luau            simple events between scripts
 src/server/                   → ServerScriptService.Server
   Main.server.luau            sets gravity, builds the test map, starts every service
   Services/AntiCheatService   server speed check
-  Services/CombatService      checks every shot and applies damage, health regen
+  Services/CombatService      checks every shot and knife hit, applies damage, health regen
   Services/LagCompensation    remembers where hitboxes were for the last second
+  Services/LightingService    the game's lighting look
+  Services/StatsService       kills, deaths, headshots, streaks and ping per player
   Services/TestDummyService   shooting-range dummies (test map only)
   Services/TestMapBuilder     builds the gray test map
+  Services/WorldWeaponService the gun and knife other players see in your hands
 src/character/                → StarterCharacterScripts
   Health.server.luau          turns off Roblox's default health regen
 src/client/                   → StarterPlayerScripts.Client
   Main.client.luau            starts the controllers
   Controllers/MovementController  sprint, bhop, slide, wall kick, Slingshot, Flow
-  Controllers/WeaponController    scoping, firing, bolt, reload, recoil, gun motion
-  Controllers/CameraController    first person, camera dip/tilt, FOV and scope zoom
-  Controllers/WeaponHud           crosshair, scope overlay, hitmarkers, ammo, health
-  Controllers/DebugHud            temporary speed/Flow readout
-  Weapon/Viewmodel.luau           the first-person gun model (placeholder blocks)
+  Controllers/WeaponController    scoping, sway, firing, bolt, reload, recoil, weapon switching
+  Controllers/KnifeController     knife slash and lunge
+  Controllers/CameraController    first person, camera dip/tilt, FOV, scope zoom, fire kick
+  Controllers/SoundController     plays every sound
+  Controllers/EffectsController   impacts, bullet holes, other players' tracers
+  Controllers/CharacterPoseController  arm poses for other players
+  Controllers/DeathCamController  the camera and panel after you die
+  Controllers/WeaponHud           crosshair, scope overlay, hitmarkers, kill banner, ammo, health
+  Controllers/FlowHud             Flow ring and speed lines
+  Controllers/KillFeedHud         kill feed
+  Controllers/ScoreboardHud       Tab scoreboard
+  Controllers/DebugHud            F3 debug info
+  Weapon/Viewmodel.luau           first-person sniper, knife and arms
   Weapon/Tracers.luau             bullet tracers
 stylua.toml                   code formatting settings
 ```
 
-## Next up: Phase 3
+## Next up: Phase 5
 
-The feel pass: a real sniper model, arms, sounds (headshot, kill, bolt, footsteps), impact effects, and polish on
-recoil, sway and tracers.
+The Free-For-All match (first to 25 kills or 8 minutes, results screen, next match) and the Cinder Terraces map.
