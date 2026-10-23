@@ -215,6 +215,7 @@ end
 function MovementController.SetTouchCrouch(held: boolean)
 	touchCrouchHeld = held
 end
+
 local dashVelocity: Vector3? = nil
 local dashEndsAt = -math.huge
 

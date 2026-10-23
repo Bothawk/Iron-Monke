@@ -5,6 +5,7 @@
 local MatchState = {
 	Phase = "Intermission", -- "Intermission" | "Playing" | "Results"
 	CombatEnabled = true, -- off on the results screen
+	FirstBloodTaken = false, -- reset at the start of every match
 }
 
 return MatchState

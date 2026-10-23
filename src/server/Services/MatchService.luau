@@ -39,8 +39,14 @@ local function setPhase(phase: string, duration: number)
 	matchFolder:SetAttribute("PhaseEndsAt", workspace:GetServerTimeNow() + duration)
 end
 
+-- Players who are in the match (not still on the main menu), best first.
 local function sortedPlayers(): { Player }
-	local players = Players:GetPlayers()
+	local players = {}
+	for _, player in Players:GetPlayers() do
+		if PlayService.IsInGame(player) then
+			table.insert(players, player)
+		end
+	end
 	table.sort(players, function(a, b)
 		if kills(a) ~= kills(b) then
 			return kills(a) > kills(b)
@@ -107,12 +113,26 @@ local function respawnEveryone()
 	end
 end
 
+local function anyoneInGame(): boolean
+	for _, player in Players:GetPlayers() do
+		if PlayService.IsInGame(player) then
+			return true
+		end
+	end
+	return false
+end
+
 local function intermission()
 	-- Votes cast on the results screen carry over into the warm-up.
 	matchFolder:SetAttribute("VoteOptions", table.concat(MatchConfig.Maps, ","))
 	recountVotes()
 	setPhase("Intermission", MatchConfig.IntermissionTime)
 	task.wait(MatchConfig.IntermissionTime)
+	-- Don't start a match for an empty server; keep warming up until someone plays.
+	while not anyoneInGame() do
+		setPhase("Intermission", MatchConfig.IntermissionTime)
+		task.wait(MatchConfig.IntermissionTime)
+	end
 end
 
 local function playMatch()
@@ -122,6 +142,7 @@ local function playMatch()
 	updateLeader()
 	matchFolder:SetAttribute("Winner", "")
 	MatchState.CombatEnabled = true
+	MatchState.FirstBloodTaken = false
 	respawnEveryone()
 	setPhase("Playing", MatchConfig.Duration)
 

@@ -17,7 +17,14 @@ local MatchConfig = {
 		Kill = 25,
 		Headshot = 15,
 		Longshot = 10,
-		Slice = 20,
+		-- Extra coins for these kill tags (all checked by the server).
+		Tags = {
+			SLICE = 20,
+			WALLBANG = 10,
+			SHUTDOWN = 15, -- ending a 5+ kill streak
+			REVENGE = 10, -- killing whoever last killed you
+			["FIRST BLOOD"] = 10, -- the first kill of a match
+		} :: { [string]: number },
 		Win = 150,
 		TopThree = 75, -- 2nd and 3rd place
 	},

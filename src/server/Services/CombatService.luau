@@ -52,6 +52,9 @@ local CombatService = {}
 
 local weaponStates: { [Player]: WeaponState } = {}
 local lastDamagedAt: { [Humanoid]: number } = {}
+local lastKillerOf: { [Player]: Player } = {} -- for REVENGE
+
+local SHUTDOWN_STREAK = 5 -- ending a streak this long is a SHUTDOWN
 
 local fireShot = Net.Event(Net.Names.FireShot)
 local reload = Net.Event(Net.Names.Reload)
@@ -180,17 +183,41 @@ local function applyDamage(
 	zone: Hitboxes.Zone,
 	distance: number,
 	origin: Vector3,
-	context: KillTags.ShotContext?
+	context: KillTags.ShotContext?,
+	wallsPassed: number
 )
+	local victimPlayer = Players:GetPlayerFromCharacter(victim)
+	-- Read before the damage: Roblox resets the streak the moment they die.
+	local victimStreak = if victimPlayer then victimPlayer:GetAttribute("Streak") or 0 else 0
+
 	humanoid:TakeDamage(damage)
 	lastDamagedAt[humanoid] = os.clock()
 	local killed = humanoid.Health <= 0
 	local tags = if killed then KillTags.Compute(weaponKind, zone, distance, context) else {}
+	if killed then
+		-- Tags only the server can know, so they're safe to pay coins for.
+		if wallsPassed > 0 then
+			table.insert(tags, "WALLBANG")
+		end
+		if victimPlayer and victimStreak >= SHUTDOWN_STREAK then
+			table.insert(tags, "SHUTDOWN")
+		end
+		if victimPlayer and lastKillerOf[attacker] == victimPlayer then
+			table.insert(tags, "REVENGE")
+			lastKillerOf[attacker] = nil
+		end
+		if victimPlayer and MatchState.Phase == "Playing" and not MatchState.FirstBloodTaken then
+			MatchState.FirstBloodTaken = true
+			table.insert(tags, 1, "FIRST BLOOD")
+		end
+		if victimPlayer then
+			lastKillerOf[victimPlayer] = attacker
+		end
+	end
 	local attackerState = weaponStates[attacker]
 	local weaponName = if weaponKind == "Sniper" and attackerState
 		then attackerState.Stats.DisplayName
 		else WeaponConfig.Knife.DisplayName
-	local victimPlayer = Players:GetPlayerFromCharacter(victim)
 
 	shotResult:FireClient(attacker, {
 		Zone = zone,
@@ -215,10 +242,13 @@ local function applyDamage(
 	end
 
 	if killed then
-		StatsService.RecordKill(attacker, victimPlayer, tags)
-
-		-- Dummies respawn forever, so they don't pay out unless turned on for testing.
+		-- Dummies respawn forever, so they don't count toward the match, coins or
+		-- progress unless turned on for testing.
 		local countsForProgress = victimPlayer ~= nil or MatchConfig.DummyKillsCount
+		if countsForProgress then
+			StatsService.RecordKill(attacker, victimPlayer, tags)
+		end
+
 		-- Coins only for tags the server can check itself, so a modified client can't
 		-- farm bonuses by claiming airshots or Overflow.
 		local rewards = MatchConfig.Rewards
@@ -229,8 +259,10 @@ local function applyDamage(
 		if table.find(tags, "LONGSHOT") then
 			coins += rewards.Longshot
 		end
-		if table.find(tags, "SLICE") then
-			coins += rewards.Slice
+		for _, tag in { "SLICE", "WALLBANG", "SHUTDOWN", "REVENGE", "FIRST BLOOD" } do
+			if table.find(tags, tag) then
+				coins += rewards.Tags[tag]
+			end
 		end
 		if countsForProgress then
 			reward(attacker, coins, table.concat(tags, " · "))
@@ -269,6 +301,10 @@ end
 
 local function getVictim(victim: any, attackerCharacter: Model): (Model?, Humanoid?)
 	if typeof(victim) ~= "Instance" or not victim:IsA("Model") or victim == attackerCharacter then
+		return nil, nil
+	end
+	-- Spawn-protected players can't be hurt, so there's no hit to report.
+	if victim:FindFirstChildOfClass("ForceField") then
 		return nil, nil
 	end
 	if not LagCompensation.IsTracked(victim) then
@@ -411,7 +447,8 @@ local function onFireShot(
 		zone,
 		distance,
 		origin,
-		KillTags.Sanitize(rawContext)
+		KillTags.Sanitize(rawContext),
+		walls
 	)
 end
 
@@ -485,7 +522,8 @@ local function onMeleeHit(player: Player, kind: any, victim: any, attackTime: an
 		"Body",
 		distance,
 		head.Position,
-		KillTags.Sanitize(rawContext)
+		KillTags.Sanitize(rawContext),
+		0
 	)
 end
 
@@ -559,6 +597,12 @@ function CombatService.Start()
 	end
 	Players.PlayerRemoving:Connect(function(player)
 		weaponStates[player] = nil
+		lastKillerOf[player] = nil
+		for other, killer in lastKillerOf do
+			if killer == player then
+				lastKillerOf[other] = nil
+			end
+		end
 	end)
 
 	fireShot.OnServerEvent:Connect(onFireShot)

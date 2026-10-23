@@ -8,6 +8,11 @@ local Players = game:GetService("Players")
 
 local WorldWeaponService = {}
 
+type Palette = { Primary: Color3, Secondary: Color3, Accent: Color3 }
+
+-- Colors asked for before the gun was built (the loadout can arrive first).
+local pendingPalettes: { [Model]: Palette } = {}
+
 local SCALE = 1.5
 local PRIMARY = Color3.fromRGB(58, 60, 66)
 local SECONDARY = Color3.fromRGB(28, 29, 33)
@@ -95,16 +100,23 @@ local function attach(character: Model)
 
 	model.Parent = character
 	WorldWeaponService.SetEquipped(character, "Sniper")
+	local palette = pendingPalettes[character]
+	if palette then
+		pendingPalettes[character] = nil
+		WorldWeaponService.SetPalette(character, palette)
+	end
 end
 
 -- Recolors the third-person sniper to match the equipped weapon (or skin).
-function WorldWeaponService.SetPalette(
-	character: Model,
-	palette: { Primary: Color3, Secondary: Color3, Accent: Color3 }
-)
+function WorldWeaponService.SetPalette(character: Model, palette: Palette)
 	local model = character:FindFirstChild("WorldWeapon")
 	local sniper = model and model:FindFirstChild("Sniper")
 	if not sniper then
+		pendingPalettes[character] = palette
+		-- Forget it if the character goes away before the gun is built.
+		character.AncestryChanged:Once(function()
+			pendingPalettes[character] = nil
+		end)
 		return
 	end
 	for _, part in sniper:GetChildren() do

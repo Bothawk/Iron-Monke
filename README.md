@@ -123,8 +123,10 @@ sloped streets running down into three lanes:
 - **After each shot** you unscope while the bolt cycles. Keep holding right click to scope back in automatically.
 - **Scoped movement:** walking is slower while scoped, but slides and bhops keep their speed.
 - **Kill tags:** HEADSHOT, NOSCOPE (barely scoped), QUICKSCOPE (within 0.25 s of the scope finishing), AIRSHOT,
-  FLOW KILL (during Overflow) and LONGSHOT (200+ studs). Quick kills chain into DOUBLE KILL, TRIPLE KILL and
-  RAMPAGE.
+  FLOW KILL (during Overflow), LONGSHOT (200+ studs), WALLBANG (through a wall), SHUTDOWN (ending a 5+ kill
+  streak), REVENGE (killing whoever last killed you) and FIRST BLOOD (the match's first kill). Quick kills chain
+  into DOUBLE KILL, TRIPLE KILL and RAMPAGE.
+- **Spawn protection:** shots at a player still in their spawn bubble show no hitmarker, since they can't be hurt.
 - **Health** comes back 5 seconds after you last took damage. You respawn 4 seconds after dying.
 - **Hit registration:** your game checks the hit instantly (the hitmarker shows right away), then the server
   re-checks it, rewinding the target to where you saw them. Kills only count once the server agrees.
@@ -153,9 +155,11 @@ Hovering an attachment in the Loadout shows how it changes the stat bars. Loadou
 
 ## Coins
 
-Kills during a match pay **25 coins**, plus 15 for a headshot, 10 for a longshot (200+ studs) and 20 for a knife
-lunge. Winning pays 150, and 2nd or 3rd place pays 75. Warm-up kills and Test Range dummies don't pay (set
-`DummyKillsCount = true` in `MatchConfig.luau` to test the economy alone).
+Kills during a match pay **25 coins**, plus 15 for a headshot, 20 for a knife lunge, 15 for a SHUTDOWN, and 10
+each for a longshot, WALLBANG, REVENGE and FIRST BLOOD. Winning pays 150, and 2nd or 3rd place pays 75. Only tags
+the server checks itself pay, so a hacked game can't fake them. Warm-up kills and Test Range dummies don't pay or
+count toward the match (set `DummyKillsCount = true` in `MatchConfig.luau` to test the economy alone). Matches
+only start once someone has pressed PLAY.
 
 ## Settings (M → Settings)
 

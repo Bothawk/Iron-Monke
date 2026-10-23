@@ -59,6 +59,7 @@ type Session = {
 	Profile: Profile,
 	CanSave: boolean, -- false if loading failed; never save over unknown data
 	Dirty: boolean,
+	Released: boolean, -- set once the leaving save starts; nothing may re-lock after it
 	JoinedAt: number,
 	SettingsSaves: { number },
 }
@@ -190,8 +191,11 @@ end
 
 local function save(player: Player, session: Session, release: boolean)
 	local dataStore = getStore()
-	if not dataStore or not session.CanSave then
+	if not dataStore or not session.CanSave or (session.Released and not release) then
 		return
+	end
+	if release then
+		session.Released = true
 	end
 	local stats = session.Profile.Stats
 	stats.TimePlayed += os.clock() - session.JoinedAt
@@ -200,6 +204,11 @@ local function save(player: Player, session: Session, release: boolean)
 	for attempt = 1, RETRIES do
 		local ok, err = pcall(function()
 			dataStore:UpdateAsync(key(player), function(_stored: Stored?)
+				-- An autosave that was already running when the player left must not
+				-- put the lock back after the leaving save released it.
+				if session.Released and not release then
+					return nil
+				end
 				return {
 					Profile = session.Profile,
 					Lock = if release then nil else { JobId = SERVER_ID, Expires = os.time() + LOCK_TIME },
@@ -249,7 +258,7 @@ function DataService.Update(player: Player, change: (Profile) -> ())
 end
 
 function DataService.AddCoins(player: Player, amount: number, reason: string)
-	if amount <= 0 then
+	if amount <= 0 or not sessions[player] then
 		return
 	end
 	DataService.Update(player, function(profile)
@@ -273,16 +282,25 @@ local function onPlayerAdded(player: Player)
 	if not player.Parent then
 		-- They left while loading; give the lock back.
 		if canSave then
-			save(
-				player,
-				{ Profile = profile, CanSave = true, Dirty = false, JoinedAt = os.clock(), SettingsSaves = {} },
-				true
-			)
+			save(player, {
+				Profile = profile,
+				CanSave = true,
+				Dirty = false,
+				Released = false,
+				JoinedAt = os.clock(),
+				SettingsSaves = {},
+			}, true)
 		end
 		return
 	end
-	sessions[player] =
-		{ Profile = profile, CanSave = canSave, Dirty = false, JoinedAt = os.clock(), SettingsSaves = {} }
+	sessions[player] = {
+		Profile = profile,
+		CanSave = canSave,
+		Dirty = false,
+		Released = false,
+		JoinedAt = os.clock(),
+		SettingsSaves = {},
+	}
 	push(player)
 	settingsLoaded:FireClient(player, profile.Settings)
 	DataService.ProfileLoaded:Fire(player, profile)

@@ -158,7 +158,8 @@ local function getVictim(part: BasePart): (Model?, string?)
 		return nil, nil
 	end
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
-	if not humanoid or humanoid.Health <= 0 then
+	-- Dead or spawn-protected targets can't be hurt, so show no hitmarker.
+	if not humanoid or humanoid.Health <= 0 or model:FindFirstChildOfClass("ForceField") then
 		return nil, nil
 	end
 	if Hitboxes.GetZone(part.Name) then
