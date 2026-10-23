@@ -10,6 +10,7 @@ local MovementConfig = {
 	SprintMinForwardInput = 0.3, -- how much forward input sprinting needs (no sprinting sideways or backward)
 	KnifeSpeedMultiplier = 1.15, -- used once the knife exists (phase 4)
 	CrouchSpeed = 9,
+	ScopedSpeed = 10, -- walking while scoped in
 	GroundAccelTime = 0.12, -- time to reach WalkSpeed from standing
 	GroundStopTime = 0.1, -- time to stop from WalkSpeed
 

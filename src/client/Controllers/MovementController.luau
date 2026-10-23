@@ -182,9 +182,19 @@ local function approach(current: Vector3, target: Vector3, maxDelta: number): Ve
 	return current + diff / distance * maxDelta
 end
 
+local scoped = false
+
+-- Called by the weapon while scoped in: walking slows down and sprint is off.
+-- Slides and air movement keep their speed, so scoped bhops still work.
+function MovementController.SetScoped(isScoped: boolean)
+	scoped = isScoped
+end
+
 local function groundMaxSpeed(): number
 	if state.Crouching then
-		return Config.CrouchSpeed
+		return math.min(Config.CrouchSpeed, if scoped then Config.ScopedSpeed else math.huge)
+	elseif scoped then
+		return Config.ScopedSpeed
 	elseif state.Sprinting then
 		return Config.SprintSpeed
 	end
@@ -389,7 +399,7 @@ local function step(dt: number)
 
 		if state.Grounded and not state.Sliding then
 			state.Crouching = crouchHeld
-			state.Sprinting = sprintHeld and not crouchHeld
+			state.Sprinting = sprintHeld and not crouchHeld and not scoped
 			-- Landing grace: no friction yet, so a perfect hop keeps every bit of speed.
 			local inHopWindow = now - landedAt <= Config.PerfectHopWindow and vel.Magnitude > groundMaxSpeed()
 			if not inHopWindow then

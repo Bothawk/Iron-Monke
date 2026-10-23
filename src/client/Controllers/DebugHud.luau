@@ -1,5 +1,5 @@
 --!strict
--- Temporary test HUD for phase 1: crosshair dot, speed, Flow meter and movement state.
+-- Temporary test HUD: speed, Flow meter and movement state.
 -- The real HUD replaces this in phase 4.
 
 local Players = game:GetService("Players")
@@ -28,18 +28,9 @@ function DebugHud.Start()
 	gui.IgnoreGuiInset = true
 	gui.ResetOnSpawn = false
 
-	local dot = Instance.new("Frame")
-	dot.AnchorPoint = Vector2.new(0.5, 0.5)
-	dot.Position = UDim2.fromScale(0.5, 0.5)
-	dot.Size = UDim2.fromOffset(4, 4)
-	dot.BackgroundColor3 = Color3.new(1, 1, 1)
-	dot.BorderSizePixel = 0
-	Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-	dot.Parent = gui
-
 	local barBack = Instance.new("Frame")
 	barBack.AnchorPoint = Vector2.new(0.5, 1)
-	barBack.Position = UDim2.new(0.5, 0, 1, -60)
+	barBack.Position = UDim2.new(0.5, 0, 1, -110)
 	barBack.Size = UDim2.fromOffset(320, 6)
 	barBack.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
 	barBack.BackgroundTransparency = 0.3
@@ -53,7 +44,7 @@ function DebugHud.Start()
 
 	local label = Instance.new("TextLabel")
 	label.AnchorPoint = Vector2.new(0.5, 1)
-	label.Position = UDim2.new(0.5, 0, 1, -72)
+	label.Position = UDim2.new(0.5, 0, 1, -122)
 	label.Size = UDim2.fromOffset(600, 24)
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.RobotoMono

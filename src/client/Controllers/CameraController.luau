@@ -1,5 +1,6 @@
 --!strict
--- First-person camera feel: slide/crouch drop, landing dip, strafe tilt, and FOV changes for sprint, slide and Flow.
+-- First-person camera feel: slide/crouch drop, landing dip, strafe tilt, scope zoom,
+-- and FOV changes for sprint, slide and Flow.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,6 +9,7 @@ local RunService = game:GetService("RunService")
 local Config = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local Spring = require(ReplicatedStorage.Shared.Util.Spring)
 local MovementController = require(script.Parent.MovementController)
+local WeaponController = require(script.Parent.WeaponController)
 
 local player = Players.LocalPlayer
 local CameraConfig = Config.Camera
@@ -21,6 +23,7 @@ end
 
 function CameraController.Start()
 	local movementState = MovementController.State
+	local weaponState = WeaponController.State
 	player.CameraMode = Enum.CameraMode.LockFirstPerson
 
 	local drop = 0
@@ -52,8 +55,10 @@ function CameraController.Start()
 		drop = smooth(drop, targetDrop, CameraConfig.DropSharpness, dt)
 		humanoid.CameraOffset = Vector3.new(0, -drop + dip:Update(dt), 0)
 
-		local tiltAmount = if movementState.Sliding
-			then CameraConfig.SlideTilt
+		-- No tilt while scoping: a leaning scope is hard to aim with.
+		local tiltAmount = if weaponState.AdsAlpha > 0
+			then 0
+			elseif movementState.Sliding then CameraConfig.SlideTilt
 			elseif not movementState.Grounded then CameraConfig.AirStrafeTilt
 			else 0
 		-- Negative roll leans the view to the right.
@@ -65,7 +70,7 @@ function CameraController.Start()
 			+ (if movementState.Sliding then CameraConfig.SlideFovBoost else 0)
 			+ (if movementState.Sprinting then CameraConfig.SprintFovBoost else 0)
 		fov = smooth(fov, targetFov, CameraConfig.FovSharpness, dt)
-		camera.FieldOfView = fov
+		camera.FieldOfView = WeaponController.ApplyZoom(fov)
 	end)
 end
 

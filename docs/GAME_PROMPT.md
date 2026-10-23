@@ -1,7 +1,7 @@
 # Game design prompt
 
 This is the full design brief. Paste it into an AI coding assistant to keep building the game, one phase at a time.
-Phase 1 is already written in this project, so tell the assistant to start from Phase 2 and read the existing code first.
+Phases 1 and 2 are already written in this project, so tell the assistant to start from Phase 3 and read the existing code first.
 
 Changes from the first version:
 - Sprint added: hold Left Shift while moving forward. Crouch/slide is C.
@@ -235,7 +235,7 @@ Plan for later (build the structure to support these, but don't make them yet): 
 14. BUILD PHASES (do one at a time, then stop and tell me how to test)
 =====================================================
 PHASE 1 (DONE): Movement (walk, sprint, jump, bhop, slide, wall kick, Flow meter, Slingshot) on a gray test map, plus the server speed check.
-PHASE 2: VANTA sniper with ADS, quickscope, hit registration with lag compensation, damage, death/respawn. Checklist: shots never hit through walls they shouldn't, headshots at 200+ studs register at 150 ms ping.
+PHASE 2 (DONE): VANTA sniper with ADS, quickscope, hit registration with lag compensation, damage, death/respawn. Checklist: shots never hit through walls they shouldn't, headshots at 200+ studs register at 150 ms ping.
 PHASE 3: Feel pass (viewmodel, camera, tracers, impact effects, all sounds including the headshot/kill sounds).
 PHASE 4: HUD, killfeed, killcam, scoreboard. Knife.
 PHASE 5: Free-For-All match system and the Cinder Terraces map.

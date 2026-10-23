@@ -1,0 +1,3 @@
+--!strict
+-- Intentionally empty. A script named "Health" here replaces Roblox's default one,
+-- which would regenerate health constantly. CombatService handles regen instead.

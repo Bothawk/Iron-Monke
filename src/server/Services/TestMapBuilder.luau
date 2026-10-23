@@ -1,6 +1,6 @@
 --!strict
--- Builds a gray movement test map when the place has no "Map" folder yet.
--- It is only for phase 1 testing; Cinder Terraces replaces it in phase 5.
+-- Builds a gray test map (movement areas and a shooting range) when the place has
+-- no "Map" folder yet. Cinder Terraces replaces it in phase 5.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -161,6 +161,13 @@ local function buildGapJumps(map: Instance)
 	makeSign(map, "GAP JUMPS: build speed first", Vector3.new(x, 10, 14), Vector3.new(0, 10, 0))
 end
 
+-- Dummies are added by TestDummyService. This builds the cover wall and signs.
+local function buildShootingRange(map: Instance)
+	makePart(map, "RangeCover", Vector3.new(30, 14, 2), CFrame.new(35, 7, -75))
+	makeSign(map, "SHOOTING RANGE: turn around", Vector3.new(0, 16, 12), Vector3.new(0, 16, 0))
+	makeSign(map, "COVER TEST: must NOT be hittable from here", Vector3.new(35, 17, -74), Vector3.new(0, 17, 0))
+end
+
 local function removeTemplateDefaults()
 	-- The Baseplate template's own floor and spawn would overlap the test map.
 	for _, name in { "Baseplate", "SpawnLocation" } do
@@ -185,6 +192,8 @@ function TestMapBuilder.Build()
 	buildWallKickAlley(map)
 	buildSlingshot(map)
 	buildGapJumps(map)
+	buildShootingRange(map)
+	map:SetAttribute("IsTestMap", true)
 
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Anchored = true
