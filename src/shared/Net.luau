@@ -19,6 +19,14 @@ Net.Names = {
 	KillFeed = "KillFeed", -- server → everyone: who killed whom
 	MatchVote = "MatchVote", -- client → server: map id
 	MatchResults = "MatchResults", -- server → everyone: final standings
+	RequestProfile = "RequestProfile", -- client → server: send my profile again
+	ProfileUpdated = "ProfileUpdated", -- server → owner: the saved profile
+	SettingsLoaded = "SettingsLoaded", -- server → owner: saved settings
+	SaveSettings = "SaveSettings", -- client → server: changed settings
+	CoinsEarned = "CoinsEarned", -- server → owner: amount and reason, for the popup
+	ShopAction = "ShopAction", -- client → server: buy or equip weapons and attachments
+	ShopResult = "ShopResult", -- server → owner: whether it worked and why not
+	Loadout = "Loadout", -- server → owner: weapon and attachments for this life
 }
 
 local function getFolder(): Instance

@@ -1,12 +1,16 @@
 --!strict
--- Combat HUD: crosshair that opens with spread, scope overlay, hitmarkers, kill
--- banner with tags and multi-kills, ammo, health and a damage flash.
+-- Combat HUD: the crosshair (style, color, size and gap from settings, opening with
+-- spread), the scope or red-dot overlay, hitmarkers, the kill banner with tags and
+-- multi-kills, coin popups, ammo, health and a damage flash.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local SettingsConfig = require(ReplicatedStorage.Shared.Config.SettingsConfig)
 local WeaponConfig = require(ReplicatedStorage.Shared.Config.WeaponConfig)
+local ProfileController = require(script.Parent.ProfileController)
+local SettingsController = require(script.Parent.SettingsController)
 local WeaponController = require(script.Parent.WeaponController)
 
 local player = Players.LocalPlayer
@@ -15,16 +19,16 @@ local WHITE = Color3.new(1, 1, 1)
 local BLACK = Color3.new(0, 0, 0)
 local RED = Color3.fromRGB(255, 60, 60)
 local ACCENT = Color3.fromRGB(255, 140, 40)
+local GOLD = Color3.fromRGB(255, 210, 80)
 local FONT = Enum.Font.GothamBold
 
 local HITMARKER_TIME = 0.2
 local KILL_BANNER_TIME = 1.6
+local COIN_POPUP_TIME = 1.4
 local MULTI_KILL_WINDOW = 4 -- kills within this many seconds of each other chain
 local MULTI_KILL_NAMES = { [2] = "DOUBLE KILL", [3] = "TRIPLE KILL" }
 local MULTI_KILL_MAX_NAME = "RAMPAGE"
 local DAMAGE_FLASH_TIME = 0.4
-local CROSSHAIR_LENGTH = 9
-local CROSSHAIR_MIN_GAP = 4
 
 local WeaponHud = {}
 
@@ -52,7 +56,25 @@ local function label(parent: Instance, props: { [string]: any }): TextLabel
 	return l
 end
 
-local function buildCrosshair(gui: ScreenGui): (Frame, { Frame })
+type Crosshair = {
+	Root: Frame,
+	Arms: { Frame },
+	Dot: Frame,
+	Circle: Frame,
+	Strokes: { UIStroke },
+}
+
+local function outline(parent: GuiObject, strokes: { UIStroke })
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = BLACK
+	stroke.Transparency = 0.5
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = parent
+	table.insert(strokes, stroke)
+end
+
+local function buildCrosshair(gui: ScreenGui): Crosshair
+	local strokes = {}
 	local root = frame(gui, {
 		Name = "Crosshair",
 		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -60,22 +82,63 @@ local function buildCrosshair(gui: ScreenGui): (Frame, { Frame })
 		Size = UDim2.fromOffset(0, 0),
 		BackgroundTransparency = 1,
 	})
-	local dot = frame(root, { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(3, 3) })
+	local dot = frame(root, { AnchorPoint = Vector2.new(0.5, 0.5) })
 	Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+	outline(dot, strokes)
+
+	local circle = frame(root, { AnchorPoint = Vector2.new(0.5, 0.5), BackgroundTransparency = 1 })
+	Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
+	local ring = Instance.new("UIStroke")
+	ring.Name = "Ring"
+	ring.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	ring.Parent = circle
 
 	local arms = {}
-	for _, vertical in { false, false, true, true } do
-		local arm = frame(root, {
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = if vertical then UDim2.fromOffset(2, CROSSHAIR_LENGTH) else UDim2.fromOffset(CROSSHAIR_LENGTH, 2),
-		})
-		local stroke = Instance.new("UIStroke")
-		stroke.Color = BLACK
-		stroke.Transparency = 0.6
-		stroke.Parent = arm
+	for _ = 1, 4 do
+		local arm = frame(root, { AnchorPoint = Vector2.new(0.5, 0.5) })
+		outline(arm, strokes)
 		table.insert(arms, arm)
 	end
-	return root, arms
+	return { Root = root, Arms = arms, Dot = dot, Circle = circle, Strokes = strokes }
+end
+
+-- Applies the crosshair settings. `spreadPixels` opens the gap with weapon spread.
+local function layoutCrosshair(crosshair: Crosshair, spreadPixels: number)
+	local style = SettingsController.Get("CrosshairStyle")
+	local color = SettingsConfig.CrosshairColors[SettingsController.Get("CrosshairColor")] or WHITE
+	local size = SettingsController.Get("CrosshairSize")
+	local gap = SettingsController.Get("CrosshairGap") + spreadPixels
+	local thickness = SettingsController.Get("CrosshairThickness")
+	local showOutline = SettingsController.Get("CrosshairOutline")
+
+	local showArms = style == "Cross" or style == "Cross + dot"
+	local showDot = style == "Dot" or style == "Cross + dot"
+	local showCircle = style == "Circle"
+
+	local offset = gap + size / 2
+	local positions =
+		{ Vector2.new(-offset, 0), Vector2.new(offset, 0), Vector2.new(0, -offset), Vector2.new(0, offset) }
+	for i, arm in crosshair.Arms do
+		arm.Visible = showArms
+		arm.BackgroundColor3 = color
+		arm.Position = UDim2.fromOffset(positions[i].X, positions[i].Y)
+		arm.Size = if i <= 2 then UDim2.fromOffset(size, thickness) else UDim2.fromOffset(thickness, size)
+	end
+	crosshair.Dot.Visible = showDot
+	crosshair.Dot.BackgroundColor3 = color
+	local dotSize = thickness + 1
+	crosshair.Dot.Size = UDim2.fromOffset(dotSize, dotSize)
+
+	crosshair.Circle.Visible = showCircle
+	local diameter = (gap + size) * 2
+	crosshair.Circle.Size = UDim2.fromOffset(diameter, diameter)
+	local ring = crosshair.Circle:FindFirstChild("Ring") :: UIStroke
+	ring.Color = color
+	ring.Thickness = thickness
+
+	for _, stroke in crosshair.Strokes do
+		stroke.Enabled = showOutline
+	end
 end
 
 local function buildScope(gui: ScreenGui): (Frame, Frame)
@@ -137,6 +200,39 @@ local function buildScope(gui: ScreenGui): (Frame, Frame)
 	return root, lens
 end
 
+-- The red-dot sight: no black ring, just a glowing dot with a faint circle.
+local function buildRedDot(gui: ScreenGui): Frame
+	local root = frame(gui, {
+		Name = "RedDot",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(0, 0),
+		BackgroundTransparency = 1,
+		Visible = false,
+	})
+	local dot =
+		frame(root, { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(6, 6), BackgroundColor3 = RED })
+	Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+	local glow = frame(root, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Size = UDim2.fromOffset(14, 14),
+		BackgroundColor3 = RED,
+		BackgroundTransparency = 0.75,
+	})
+	Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
+	local circle = frame(
+		root,
+		{ AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(90, 90), BackgroundTransparency = 1 }
+	)
+	Instance.new("UICorner", circle).CornerRadius = UDim.new(1, 0)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = RED
+	stroke.Transparency = 0.6
+	stroke.Thickness = 1.5
+	stroke.Parent = circle
+	return root
+end
+
 local function buildHitmarker(gui: ScreenGui): (Frame, { Frame })
 	local root = frame(gui, {
 		Name = "Hitmarker",
@@ -177,7 +273,8 @@ function WeaponHud.Start()
 	})
 
 	local scope, scopeLens = buildScope(gui)
-	local crosshair, arms = buildCrosshair(gui)
+	local redDot = buildRedDot(gui)
+	local crosshair = buildCrosshair(gui)
 	local hitmarker, hitBars = buildHitmarker(gui)
 
 	local killBanner = label(gui, {
@@ -197,6 +294,15 @@ function WeaponHud.Start()
 		Size = UDim2.fromOffset(600, 22),
 		TextSize = 16,
 		TextColor3 = ACCENT,
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	})
+	local coinPopup = label(gui, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.68, 56),
+		Size = UDim2.fromOffset(300, 22),
+		TextSize = 18,
+		TextColor3 = GOLD,
 		TextTransparency = 1,
 		TextStrokeTransparency = 1,
 	})
@@ -245,9 +351,11 @@ function WeaponHud.Start()
 
 	local hitShownAt = -math.huge
 	local killShownAt = -math.huge
+	local coinsShownAt = -math.huge
 	local damageShownAt = -math.huge
 	local shownHealth = WeaponConfig.MaxHealth
 	local multiKill = 0
+	local coinTotal = 0
 
 	WeaponController.Hit:Connect(function(zone: string, killed: boolean)
 		hitShownAt = os.clock()
@@ -276,6 +384,14 @@ function WeaponHud.Start()
 		killScale.Scale = 1.35
 	end)
 
+	-- Coins from kills close together add up into one popup.
+	ProfileController.CoinsEarned:Connect(function(amount: number)
+		local now = os.clock()
+		coinTotal = if now - coinsShownAt < COIN_POPUP_TIME then coinTotal + amount else amount
+		coinsShownAt = now
+		coinPopup.Text = `+{coinTotal} coins`
+	end)
+
 	WeaponController.Damaged:Connect(function()
 		damageShownAt = os.clock()
 	end)
@@ -284,18 +400,17 @@ function WeaponHud.Start()
 		local now = os.clock()
 		local camera = workspace.CurrentCamera
 		local viewport = camera.ViewportSize
+		local stats = weapon.Stats
+		local knifeOut = weapon.Equipped == "Knife"
 
-		-- Crosshair gap matches the real spread cone on screen.
-		local spread = if weapon.Equipped == "Knife" then 0 else weapon.Spread
+		-- The crosshair gap matches the real spread cone on screen.
+		local spread = if knifeOut then 0 else weapon.Spread
 		local spreadPixels = math.tan(math.rad(spread)) / math.tan(math.rad(camera.FieldOfView) / 2) * (viewport.Y / 2)
-		local gap = CROSSHAIR_MIN_GAP + spreadPixels + CROSSHAIR_LENGTH / 2
-		arms[1].Position = UDim2.fromOffset(-gap, 0)
-		arms[2].Position = UDim2.fromOffset(gap, 0)
-		arms[3].Position = UDim2.fromOffset(0, -gap)
-		arms[4].Position = UDim2.fromOffset(0, gap)
-		crosshair.Visible = weapon.Alive and not weapon.Scoped
+		layoutCrosshair(crosshair, spreadPixels)
+		crosshair.Root.Visible = weapon.Alive and not weapon.Scoped
 
-		scope.Visible = weapon.Scoped
+		scope.Visible = weapon.Scoped and not stats.RedDot
+		redDot.Visible = weapon.Scoped and stats.RedDot
 		local diameter = viewport.Y * 0.95
 		scopeLens.Size = UDim2.fromOffset(diameter, diameter)
 
@@ -313,16 +428,19 @@ function WeaponHud.Start()
 		killDetails.TextStrokeTransparency = math.clamp(0.6 + killAge, 0, 1)
 		-- Pops in big and settles to normal size.
 		killScale.Scale += (1 - killScale.Scale) * (1 - math.exp(-14 * dt))
+
+		local coinAge = (now - coinsShownAt) / COIN_POPUP_TIME
+		coinPopup.TextTransparency = math.clamp(coinAge * coinAge, 0, 1)
+		coinPopup.TextStrokeTransparency = math.clamp(0.6 + coinAge, 0, 1)
+
 		local damageAge = (now - damageShownAt) / DAMAGE_FLASH_TIME
 		damageFlash.BackgroundTransparency = math.clamp(0.75 + damageAge * 0.25, 0.75, 1)
 
-		local weaponStats = WeaponConfig.Weapons[weapon.WeaponId]
-		local knifeOut = weapon.Equipped == "Knife"
-		weaponName.Text = if knifeOut then WeaponConfig.Knife.DisplayName else weaponStats.DisplayName
+		weaponName.Text = if knifeOut then WeaponConfig.Knife.DisplayName else stats.DisplayName
 		ammoText.Text = if knifeOut
 			then "∞"
 			elseif weapon.Reloading then "RELOADING"
-			else `{weapon.Ammo} / {weaponStats.MagSize}`
+			else `{weapon.Ammo} / {stats.MagSize}`
 		ammoText.TextSize = if weapon.Reloading and not knifeOut then 24 else 40
 		reloadBack.Visible = weapon.Reloading and not knifeOut
 		reloadFill.Size = UDim2.fromScale(weapon.ReloadProgress, 1)

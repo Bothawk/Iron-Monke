@@ -1,12 +1,14 @@
 --!strict
 -- Shot impacts: a burst of sparks or dust that matches the surface, a bullet hole
 -- that fades after a few seconds, and a red puff when a character is hit. Also
--- draws other players' tracers. Everything comes from small reusable pools.
+-- draws other players' tracers (unless their gun is suppressed). Everything comes
+-- from small reusable pools; Low graphics skips bullet holes and thins the bursts.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Net = require(ReplicatedStorage.Shared.Net)
+local SettingsController = require(script.Parent.SettingsController)
 local Tracers = require(script.Parent.Parent.Weapon.Tracers)
 local WeaponController = require(script.Parent.WeaponController)
 
@@ -85,7 +87,8 @@ local function burst(position: Vector3, normal: Vector3, color: Color3, count: n
 	impact.Attachment.WorldCFrame = CFrame.lookAt(position, position + normal) * CFrame.Angles(-math.pi / 2, 0, 0)
 	impact.Emitter.Color = ColorSequence.new(color)
 	impact.Emitter.LightEmission = lightEmission
-	impact.Emitter:Emit(count)
+	local quality = SettingsController.Get("Graphics")
+	impact.Emitter:Emit(if quality == "Low" then math.ceil(count / 3) else count)
 end
 
 local function placeHole(position: Vector3, normal: Vector3)
@@ -117,7 +120,9 @@ local function showImpact(endPoint: Vector3, normal: Vector3?, material: Enum.Ma
 	end
 	local isMetal = material ~= nil and SPARK_MATERIALS[material] == true
 	burst(endPoint, normal, if isMetal then METAL else DUST, if isMetal then 14 else 9, if isMetal then 0.8 else 0)
-	placeHole(endPoint, normal)
+	if SettingsController.Get("Graphics") ~= "Low" then
+		placeHole(endPoint, normal)
+	end
 end
 
 function EffectsController.Start()
@@ -131,7 +136,9 @@ function EffectsController.Start()
 		if typeof(effect) ~= "table" or typeof(effect.Origin) ~= "Vector3" or typeof(effect.EndPoint) ~= "Vector3" then
 			return
 		end
-		Tracers.Show(effect.Origin, effect.EndPoint)
+		if effect.Suppressed ~= true then
+			Tracers.Show(effect.Origin, effect.EndPoint)
+		end
 		local normal = if typeof(effect.Normal) == "Vector3" then effect.Normal else nil
 		local material = if typeof(effect.Material) == "EnumItem" then effect.Material else nil
 		showImpact(effect.EndPoint, normal, material, effect.HitCharacter == true)

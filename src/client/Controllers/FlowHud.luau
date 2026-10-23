@@ -9,6 +9,7 @@ local RunService = game:GetService("RunService")
 
 local MovementConfig = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local MovementController = require(script.Parent.MovementController)
+local SettingsController = require(script.Parent.SettingsController)
 local WeaponController = require(script.Parent.WeaponController)
 
 local player = Players.LocalPlayer
@@ -95,7 +96,7 @@ function FlowHud.Start()
 		local filled = math.floor(movement.Flow / MovementConfig.Flow.Max * DOT_COUNT + 0.5)
 		local overflow = movement.OverflowRemaining > 0
 
-		ring.Visible = alive and not weapon.Scoped
+		ring.Visible = alive and not weapon.Scoped and SettingsController.Get("ShowFlowRing")
 		for i, dot in dots do
 			local lit = i <= filled
 			dot.BackgroundColor3 = if lit then color else Color3.new(1, 1, 1)
@@ -104,7 +105,9 @@ function FlowHud.Start()
 		glowStroke.Transparency = if overflow then 0.3 + 0.4 * (0.5 + 0.5 * math.sin(clock * 12)) else 1
 
 		-- Lines appear from tier 1 and get stronger with each tier and with speed.
-		local intensity = if alive and movement.Tier >= 2
+		local intensity = if alive
+				and movement.Tier >= 2
+				and SettingsController.Get("SpeedLines")
 			then (movement.Tier - 1) / 3 * math.clamp(movement.Speed / MovementConfig.MaxSpeedCap, 0.4, 1)
 			else 0
 		local viewport = workspace.CurrentCamera.ViewportSize

@@ -39,7 +39,7 @@ function LightingService.Start()
 	Lighting.OutdoorAmbient = Color3.fromRGB(128, 120, 132)
 	Lighting.EnvironmentDiffuseScale = 0.6
 	Lighting.EnvironmentSpecularScale = 0.6
-	Lighting.GlobalShadows = true
+	Lighting.GlobalShadows = true -- players can turn this off locally (Graphics setting)
 	Lighting.ShadowSoftness = 0.15
 
 	local color = ensure("ColorCorrectionEffect", "GameColor") :: ColorCorrectionEffect

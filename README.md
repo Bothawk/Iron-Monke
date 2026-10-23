@@ -3,9 +3,12 @@
 A fast, sniper-only Roblox FPS with Krunker-style quickscoping and movement that builds momentum.
 The full design is in [docs/GAME_PROMPT.md](docs/GAME_PROMPT.md).
 
-**Status: Phases 1–5 are written but haven't been played yet.** That covers movement, the VANTA sniper, sounds and
-effects, the knife, kill feed, scoreboard and death cam, and the Free-For-All match on the Cinder Terraces map.
-Next step is testing in Roblox Studio. Expect a few bugs on the first run.
+**Status: Phases 1–6 are written but haven't been played yet.** That covers movement, all 5 snipers with
+attachments, sounds and effects, the knife, kill feed, scoreboard and death cam, the Free-For-All match on Cinder
+Terraces, saving, coins, the shop and the settings menu. Next step is testing in Roblox Studio. Expect a few bugs on
+the first run.
+
+The game is **arcade-style on purpose**: your shot always goes exactly where the crosshair is, with no scope sway.
 
 ---
 
@@ -30,6 +33,10 @@ You need a Windows PC or a Mac. Roblox Studio doesn't run on iPad.
 
 Leave VS Code and Rojo running while you work. Every file you save in VS Code updates in Studio right away.
 
+**Saving in Studio:** progress only saves once the place is published (File → Publish to Roblox) and **Game Settings →
+Security → Enable Studio Access to API Services** is on. Without that, everything still works but resets when you
+stop playing (you'll see a warning in Output).
+
 **To test on the Test Range** (dummies, labeled movement areas): open `src/shared/Config/MatchConfig.luau` and set
 `FirstMap = "TestRange"`. You can also vote for it with F2 during warm-up.
 
@@ -52,13 +59,15 @@ Leave VS Code and Rojo running while you work. Every file you save in VS Code up
 | Crouch / slide | C | B |
 | Shoot | Left click | Right trigger |
 | Scope (hold) | Right click | Left trigger |
-| Steady scope (hold, while scoped) | Left Shift | Click left stick |
 | Reload | R | X |
 | Sniper / knife | 1 / 3, or Q to swap | Y to swap |
 | Knife slash / lunge | Left click / right click | Right trigger / left trigger |
 | Scoreboard (hold) | Tab | View / Back |
+| Menu (loadout, shop, settings, stats) | M | |
 | Vote for a map | F1 / F2 (or click, on the results screen) | |
 | Debug info | F3 | |
+
+Scope and sprint can be switched to toggle (click once) instead of hold in **M → Settings → Controls**.
 
 Phone and tablet touch controls come in phase 7.
 
@@ -106,14 +115,50 @@ sloped streets running down into three lanes:
   accurate as the scope comes up, so a well-timed **quickscope** is accurate.
 - **After each shot** you unscope while the bolt cycles. Keep holding right click to scope back in automatically.
 - **Scoped movement:** walking is slower while scoped, but slides and bhops keep their speed.
-- **Scope sway:** the scoped crosshair drifts a little, most right after scoping in and while moving fast. Hold
-  Shift to steady it for up to 2 seconds; hold too long and it gets shaky for a moment.
 - **Kill tags:** HEADSHOT, NOSCOPE (barely scoped), QUICKSCOPE (within 0.25 s of the scope finishing), AIRSHOT,
   FLOW KILL (during Overflow) and LONGSHOT (200+ studs). Quick kills chain into DOUBLE KILL, TRIPLE KILL and
   RAMPAGE.
 - **Health** comes back 5 seconds after you last took damage. You respawn 4 seconds after dying.
 - **Hit registration:** your game checks the hit instantly (the hitmarker shows right away), then the server
   re-checks it, rewinding the target to where you saw them. Kills only count once the server agrees.
+
+## The snipers
+
+All five share the same controls; buy them with coins in **M → Shop**, then equip in **M → Loadout**.
+
+| Sniper | Price | What it's about |
+| --- | --- | --- |
+| VANTA | free | The all-rounder: one shot to the body or head, 0.9 s bolt, 5 rounds |
+| NEEDLE | 1,500 | Fastest scope (0.1 s) and bolt, moves 6% faster; body shots do 70 |
+| HARPOON | 3,000 | Any hit kills, and shots go through one thin wall (half damage); slow and heavy |
+| TWINBOLT | 4,500 | Two quick shots (60 each, so two body shots kill), then reload |
+| PULSE | 6,000 | Semi-auto: keep firing without leaving the scope; 55 body, wide hip-fire |
+
+**Attachments** unlock by getting kills with that sniper (10 to 200 kills). Each has a trade-off:
+
+- **Scope:** Standard, Long scope (more zoom), Red dot (2x, open sight, much faster)
+- **Barrel:** Standard, Muzzle brake (half the kick), Long barrel (tighter hip-fire), Suppressor (no tracer for enemies, quieter)
+- **Stock:** Standard, Light (faster scope, more kick), Heavy (less kick, slightly slower)
+- **Bolt:** Standard, Match (+1 round, slower bolt), Greased (faster bolt, −1 round)
+- **Mag:** Standard, Quick (faster reload), Extended (+2 rounds, slower reload)
+
+Hovering an attachment in the Loadout shows how it changes the stat bars. Loadout changes apply on your next spawn.
+
+## Coins
+
+Kills during a match pay **25 coins**, plus 15 for a headshot, 10 for a longshot (200+ studs) and 20 for a knife
+lunge. Winning pays 150, and 2nd or 3rd place pays 75. Warm-up kills and Test Range dummies don't pay (set
+`DummyKillsCount = true` in `MatchConfig.luau` to test the economy alone).
+
+## Settings (M → Settings)
+
+- **Controls:** mouse sensitivity, scoped sensitivity, toggle scope, toggle sprint
+- **Video:** field of view, graphics quality (Low turns off shadows and most effects), camera motion, weapon bob,
+  speed lines, FPS and ping counter
+- **Crosshair:** style (cross, dot, cross + dot, circle), color, size, gap, thickness, outline, Flow ring
+- **Audio:** master, effects, hit sounds, menus
+
+Settings save to your profile, so they follow you between servers.
 
 ## How the knife works
 
@@ -149,7 +194,7 @@ Work through these in Studio and tell me anything that's off. All the numbers ar
 - [ ] Quickscopes, noscopes and mid-air kills show the right tags.
 - [ ] Both strafing dummies can be hit; the dummy behind cover can NOT be hit from the spawn side.
 - [ ] Firing unscopes you and the bolt moves; ammo counts down and reloads by itself when empty.
-- [ ] Scope sway is small; Shift steadies it. Scoped mouse movement doesn't feel 4× faster.
+- [ ] The scoped crosshair stays perfectly still. Scoped mouse movement doesn't feel 4× faster.
 - [ ] Q swaps to the knife and back. Slash and lunge both work on a dummy.
 - [ ] Every action has a sound, and shots leave sparks or dust and a fading bullet hole.
 
@@ -161,6 +206,16 @@ Work through these in Studio and tell me anything that's off. All the numbers ar
 - [ ] Rooftop gaps need momentum, the tower ladders and balcony work, and all 4 Slingshots land you on a roof.
 - [ ] Jumping over the south railing into the sea kills you and shows "fell" in the kill feed.
 - [ ] No red errors in the Output window (View → Output), and no "[AntiCheat] ... pulled back" during normal play.
+
+**Menu, shop and saving** (M)
+- [ ] The menu frees the mouse; clicking in it never fires the gun, and right-click doesn't scope.
+- [ ] Every setting changes something you can see or hear right away, and they're still set after rejoining (needs
+      saving turned on, see setup).
+- [ ] Buying a sniper takes the coins; equipping it and respawning gives you that sniper with its own colors.
+- [ ] Locked attachments say how many kills they need; equipped ones apply on the next spawn.
+- [ ] Each sniper behaves differently: NEEDLE's fast bolt, HARPOON shooting through the thin wall on the Test Range,
+      TWINBOLT's two quick shots, PULSE staying scoped while firing.
+- [ ] Coins pop up on kills during a match, and the totals survive a rejoin.
 
 **With 2 players** (Test tab → Clients: 2 → Start)
 - [ ] You see the other player's gun or knife in their hands.
@@ -175,9 +230,9 @@ Work through these in Studio and tell me anything that's off. All the numbers ar
   made in Roblox's animation editor and uploaded.
 - Crouching and sliding lower the camera but not your hitbox.
 - The death cam shows the killer live rather than a true replay.
-- Kill tags like AIRSHOT and FLOW KILL trust what the shooter's game reports. That's fine for banners, but coin
-  bonuses (phase 6) should only use tags the server can check.
-- Stats reset every match; nothing is saved yet (phase 6).
+- Kill tags like AIRSHOT and FLOW KILL trust what the shooter's game reports, so they only appear in banners and
+  stats; coin bonuses only use tags the server checks itself.
+- All five snipers share one model, told apart by color. Unique models come later.
 
 ---
 
@@ -189,10 +244,13 @@ docs/GAME_PROMPT.md              the full design brief
 src/shared/                      → ReplicatedStorage.Shared (used by client and server)
   Config/MovementConfig.luau     every movement number
   Config/WeaponConfig.luau       every weapon and combat number
-  Config/MatchConfig.luau        match rules and map rotation
+  Config/MatchConfig.luau        match rules, coin rewards and map rotation
+  Config/SettingsConfig.luau     every player setting with its default and range
   Config/SoundConfig.luau        every sound (placeholders to swap)
   Combat/Hitboxes.luau           which body parts are head, body or limb
   Combat/KillTags.luau           HEADSHOT, NOSCOPE, QUICKSCOPE and other kill tags
+  Combat/WeaponStats.luau        a sniper's final numbers with its attachments
+  Combat/Ballistics.luau         shot casting, including through thin walls
   Net.luau                       the RemoteEvents client and server talk through
   Util/Spring.luau               smooth spring math for the camera and gun
   Util/Signal.luau               simple events between scripts
@@ -201,7 +259,9 @@ src/server/                      → ServerScriptService.Server
   Maps/CinderTerraces.luau       the main map
   Maps/TestRange.luau            gray test map with labeled areas and a shooting range
   Maps/MapKit.luau               building blocks for maps (ramps, stairs, buildings, Slingshots...)
-  Services/MatchService          warm-up, vote, match, results loop
+  Services/MatchService          warm-up, vote, match, results loop, end-of-match coins
+  Services/DataService           saving and loading profiles (with locking and retries)
+  Services/ShopService           buying snipers and choosing loadouts
   Services/MapService            loads maps, kills anyone who falls off
   Services/SpawnService          safe spawn picking and spawn protection
   Services/CombatService         checks every shot and knife hit, applies damage, health regen
@@ -217,7 +277,11 @@ src/character/                   → StarterCharacterScripts
 src/client/                      → StarterPlayerScripts.Client
   Main.client.luau               hides default Roblox HUD pieces, starts the controllers
   Controllers/MovementController     sprint, bhop, slide, wall kick, Slingshot, Flow
-  Controllers/WeaponController       scoping, sway, firing, bolt, reload, recoil, weapon switching
+  Controllers/WeaponController       scoping, firing modes, bolt, reload, recoil, weapon switching
+  Controllers/SettingsController     the player's settings, saved to their profile
+  Controllers/ProfileController      coins, owned snipers, loadouts and stats from the server
+  Controllers/MenuController         the M menu: loadout, shop, settings, stats
+  Controllers/GraphicsController     applies the graphics quality setting
   Controllers/KnifeController        knife slash and lunge
   Controllers/CameraController       first person, camera dip/tilt, FOV, scope zoom, fire kick
   Controllers/SoundController        plays every sound
@@ -232,9 +296,10 @@ src/client/                      → StarterPlayerScripts.Client
   Controllers/DebugHud               F3 debug info
   Weapon/Viewmodel.luau              first-person sniper, knife and arms
   Weapon/Tracers.luau                bullet tracers
+  UI/Widgets.luau                    buttons, sliders, toggles and stat bars for menus
 stylua.toml                      code formatting settings
 ```
 
-## Next up: Phase 6
+## Next up: Phase 7
 
-Saving progress, coins per kill, the other 4 snipers (NEEDLE, HARPOON, TWINBOLT, PULSE), the shop and attachments.
+A main menu with a 3D weapon showcase, phone and controller support, and flashy inspect animations (press F).

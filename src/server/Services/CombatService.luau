@@ -2,18 +2,24 @@
 -- Server side of all combat. Clients check hits locally for instant feedback and
 -- report them; this service re-checks every claim and is the only place damage is
 -- ever applied.
--- Sniper shots: ammo, bolt and reload timers, shot origin, lag-compensated
--- hitboxes and walls in the way.
+-- Sniper shots: ammo, fire-rate and reload timers, shot origin, lag-compensated
+-- hitboxes and walls in the way (thin walls only stop shots from weapons that
+-- can't pierce them).
 -- Knife hits: equipped weapon, cooldowns, lag-compensated reach and line of sight.
+-- Kills during a match pay out coins and count toward attachment unlocks.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
+local Ballistics = require(ReplicatedStorage.Shared.Combat.Ballistics)
 local Hitboxes = require(ReplicatedStorage.Shared.Combat.Hitboxes)
 local KillTags = require(ReplicatedStorage.Shared.Combat.KillTags)
+local MatchConfig = require(ReplicatedStorage.Shared.Config.MatchConfig)
 local Net = require(ReplicatedStorage.Shared.Net)
 local WeaponConfig = require(ReplicatedStorage.Shared.Config.WeaponConfig)
+local WeaponStats = require(ReplicatedStorage.Shared.Combat.WeaponStats)
+local DataService = require(script.Parent.DataService)
 local LagCompensation = require(script.Parent.LagCompensation)
 local MatchState = require(script.Parent.MatchState)
 local SpawnService = require(script.Parent.SpawnService)
@@ -26,10 +32,12 @@ local Lag = WeaponConfig.LagCompensation
 type Slot = "Sniper" | "Knife"
 
 type WeaponState = {
-	WeaponId: string,
+	Stats: WeaponStats.Stats,
 	Equipped: Slot,
 	EquippedAt: number,
 	Ammo: number,
+	ShotsInCycle: number,
+	NextShotDelay: number, -- the wait required after the last shot
 	LastShotAt: number, -- server clock when the last shot arrived
 	LastShotTime: number, -- the client's timestamp on the last shot
 	ReloadEndsAt: number?,
@@ -53,14 +61,16 @@ local shotResult = Net.Event(Net.Names.ShotResult)
 local tookDamage = Net.Event(Net.Names.TookDamage)
 local shotEffect = Net.Event(Net.Names.ShotEffect)
 local killFeed = Net.Event(Net.Names.KillFeed)
+local loadoutEvent = Net.Event(Net.Names.Loadout)
 
-local function newWeaponState(): WeaponState
-	local weaponId = WeaponConfig.DefaultWeapon
+local function newWeaponState(stats: WeaponStats.Stats): WeaponState
 	return {
-		WeaponId = weaponId,
+		Stats = stats,
 		Equipped = "Sniper",
 		EquippedAt = -math.huge,
-		Ammo = WeaponConfig.Weapons[weaponId].MagSize,
+		Ammo = stats.MagSize,
+		ShotsInCycle = 0,
+		NextShotDelay = 0,
 		LastShotAt = -math.huge,
 		LastShotTime = -math.huge,
 		ReloadEndsAt = nil,
@@ -117,31 +127,42 @@ end
 local function settleReload(state: WeaponState, now: number)
 	local endsAt = state.ReloadEndsAt
 	if endsAt and now >= endsAt - Validation.TimingTolerance then
-		state.Ammo = WeaponConfig.Weapons[state.WeaponId].MagSize
+		state.Ammo = state.Stats.MagSize
+		state.ShotsInCycle = 0
 		state.ReloadEndsAt = nil
 	end
 end
 
-local function sniperDamage(weaponId: string, zone: Hitboxes.Zone): number
-	local weapon = WeaponConfig.Weapons[weaponId]
+local function sniperDamage(stats: WeaponStats.Stats, zone: Hitboxes.Zone): number
 	if zone == "Head" then
-		return weapon.HeadDamage
+		return stats.HeadDamage
 	elseif zone == "Body" then
-		return weapon.BodyDamage
+		return stats.BodyDamage
 	end
-	return weapon.BodyDamage * WeaponConfig.LimbMultiplier
+	return stats.BodyDamage * stats.LimbMultiplier
 end
 
--- Is anything solid (not a character) between the origin and the hit?
-local function isBlocked(attacker: Model, origin: Vector3, direction: Vector3, distance: number): boolean
+local function charactersToIgnore(attacker: Model): { Instance }
 	local ignore: { Instance } = LagCompensation.GetTrackedModels()
 	table.insert(ignore, attacker)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = ignore
-	local hit = workspace:Raycast(origin, direction * distance, params)
-	-- A small margin so the edge of a box hugging a wall still counts.
-	return hit ~= nil and hit.Distance < distance - 0.5
+	return ignore
+end
+
+-- How many thin walls are between the origin and the hit, or nil if blocked.
+local function wallsInTheWay(
+	attacker: Model,
+	origin: Vector3,
+	direction: Vector3,
+	distance: number,
+	penetration: number
+): number?
+	return Ballistics.WallsBetween(origin, direction, distance, charactersToIgnore(attacker), penetration)
+end
+
+local function reward(player: Player, amount: number, reason: string)
+	if MatchState.Phase == "Playing" then
+		DataService.AddCoins(player, amount, reason)
+	end
 end
 
 local function rewindTime(clientTime: number, now: number): number
@@ -165,8 +186,9 @@ local function applyDamage(
 	lastDamagedAt[humanoid] = os.clock()
 	local killed = humanoid.Health <= 0
 	local tags = if killed then KillTags.Compute(weaponKind, zone, distance, context) else {}
-	local weaponName = if weaponKind == "Sniper"
-		then WeaponConfig.Weapons[weaponStates[attacker].WeaponId].DisplayName
+	local attackerState = weaponStates[attacker]
+	local weaponName = if weaponKind == "Sniper" and attackerState
+		then attackerState.Stats.DisplayName
 		else WeaponConfig.Knife.DisplayName
 	local victimPlayer = Players:GetPlayerFromCharacter(victim)
 
@@ -194,6 +216,46 @@ local function applyDamage(
 
 	if killed then
 		StatsService.RecordKill(attacker, victimPlayer, tags)
+
+		-- Dummies respawn forever, so they don't pay out unless turned on for testing.
+		local countsForProgress = victimPlayer ~= nil or MatchConfig.DummyKillsCount
+		-- Coins only for tags the server can check itself, so a modified client can't
+		-- farm bonuses by claiming airshots or Overflow.
+		local rewards = MatchConfig.Rewards
+		local coins = rewards.Kill
+		if table.find(tags, "HEADSHOT") then
+			coins += rewards.Headshot
+		end
+		if table.find(tags, "LONGSHOT") then
+			coins += rewards.Longshot
+		end
+		if table.find(tags, "SLICE") then
+			coins += rewards.Slice
+		end
+		if countsForProgress then
+			reward(attacker, coins, table.concat(tags, " · "))
+		end
+
+		if countsForProgress and MatchState.Phase == "Playing" then
+			local streak = attacker:GetAttribute("Streak") or 0
+			DataService.Update(attacker, function(profile)
+				local stats = profile.Stats
+				stats.Kills += 1
+				stats.BestStreak = math.max(stats.BestStreak, streak)
+				if table.find(tags, "HEADSHOT") then
+					stats.Headshots += 1
+				end
+				if table.find(tags, "FLOW KILL") then
+					stats.FlowKills += 1
+				end
+				if weaponKind == "Sniper" and attackerState then
+					stats.LongestShot = math.max(stats.LongestShot, math.floor(distance))
+					local weaponId = attackerState.Stats.WeaponId
+					profile.WeaponKills[weaponId] = (profile.WeaponKills[weaponId] or 0) + 1
+				end
+			end)
+		end
+
 		killFeed:FireAllClients({
 			Killer = attacker.DisplayName,
 			KillerUserId = attacker.UserId,
@@ -260,17 +322,18 @@ local function onFireShot(
 		return
 	end
 
-	local weapon = WeaponConfig.Weapons[state.WeaponId]
+	local stats = state.Stats
 	settleReload(state, serverClock)
 	if state.ReloadEndsAt or state.Ammo <= 0 then
 		return
 	end
-	-- Checked on both clocks: the client's timestamps must be a bolt apart, and so
-	-- must the arrivals (with slack for network jitter).
-	if shotTime - state.LastShotTime < weapon.BoltTime - Validation.TimingTolerance then
+	-- Checked on both clocks: the client's timestamps must be far enough apart, and
+	-- so must the arrivals (with slack for network jitter).
+	local requiredGap = state.NextShotDelay
+	if shotTime - state.LastShotTime < requiredGap - Validation.TimingTolerance then
 		return
 	end
-	if serverClock - state.LastShotAt < weapon.BoltTime - Validation.TimingTolerance * 2 then
+	if serverClock - state.LastShotAt < requiredGap - Validation.TimingTolerance * 2 then
 		return
 	end
 
@@ -281,15 +344,17 @@ local function onFireShot(
 	end
 
 	state.Ammo -= 1
+	state.ShotsInCycle += 1
+	state.NextShotDelay = WeaponStats.NextShotDelay(stats, state.ShotsInCycle)
+	if state.ShotsInCycle >= stats.ShotsPerCycle then
+		state.ShotsInCycle = 0
+	end
 	state.LastShotAt = serverClock
 	state.LastShotTime = shotTime
 	SpawnService.EndProtection(character)
 
 	-- Other players draw the tracer and impact. Hitting a character shows no bullet hole.
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { character }
-	local worldHit = workspace:Raycast(origin, direction * WeaponConfig.MaxRange, params)
+	local worldHit = Ballistics.Cast(origin, direction, WeaponConfig.MaxRange, { character }, stats.Penetration).Hit
 	local hitParent = worldHit and worldHit.Instance.Parent
 	local effect = {
 		Origin = origin,
@@ -297,6 +362,7 @@ local function onFireShot(
 		Normal = if worldHit then worldHit.Normal else nil,
 		Material = if worldHit then worldHit.Material else nil,
 		HitCharacter = hitParent ~= nil and hitParent:FindFirstChildOfClass("Humanoid") ~= nil,
+		Suppressed = stats.Suppressed,
 	}
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
@@ -323,19 +389,24 @@ local function onFireShot(
 	if not hitPart or not distance then
 		return
 	end
-	if isBlocked(character, origin, direction, distance) then
+	local walls = wallsInTheWay(character, origin, direction, distance, stats.Penetration)
+	if not walls then
 		return
 	end
 	local zone = Hitboxes.GetZone(hitPart)
 	if not zone then
 		return
 	end
+	local damage = sniperDamage(stats, zone)
+	if walls > 0 then
+		damage *= WeaponConfig.PenetrationDamageMultiplier
+	end
 
 	applyDamage(
 		player,
 		victimModel,
 		victimHumanoid,
-		sniperDamage(state.WeaponId, zone),
+		damage,
 		"Sniper",
 		zone,
 		distance,
@@ -393,7 +464,9 @@ local function onMeleeHit(player: Player, kind: any, victim: any, attackTime: an
 		return
 	end
 	local toVictim = closest - head.Position
-	if toVictim.Magnitude > 1e-3 and isBlocked(character, head.Position, toVictim.Unit, toVictim.Magnitude) then
+	if
+		toVictim.Magnitude > 1e-3 and not wallsInTheWay(character, head.Position, toVictim.Unit, toVictim.Magnitude, 0)
+	then
 		return
 	end
 
@@ -426,11 +499,10 @@ local function onReload(player: Player)
 		return
 	end
 	settleReload(state, serverClock)
-	local weapon = WeaponConfig.Weapons[state.WeaponId]
-	if state.ReloadEndsAt or state.Ammo >= weapon.MagSize then
+	if state.ReloadEndsAt or state.Ammo >= state.Stats.MagSize then
 		return
 	end
-	state.ReloadEndsAt = serverClock + weapon.ReloadTime
+	state.ReloadEndsAt = serverClock + state.Stats.ReloadTime
 end
 
 local function onEquip(player: Player, slot: any)
@@ -452,8 +524,17 @@ local function onEquip(player: Player, slot: any)
 end
 
 local function onCharacterAdded(player: Player, character: Model)
-	weaponStates[player] = newWeaponState()
 	LagCompensation.Track(character)
+	-- The loadout is read once per life, so changes in the menu apply on respawn.
+	DataService.WaitFor(player, 5)
+	if player.Character ~= character then
+		return
+	end
+	local weaponId, attachments = DataService.GetLoadout(player)
+	local stats = WeaponStats.Compute(weaponId, attachments)
+	weaponStates[player] = newWeaponState(stats)
+	loadoutEvent:FireClient(player, { WeaponId = weaponId, Attachments = attachments })
+	WorldWeaponService.SetPalette(character, stats.Palette)
 
 	local humanoid = character:WaitForChild("Humanoid") :: Humanoid
 	humanoid.MaxHealth = WeaponConfig.MaxHealth
@@ -488,7 +569,15 @@ function CombatService.Start()
 	equip.OnServerEvent:Connect(onEquip)
 
 	-- Health only comes back after a few seconds without taking damage.
-	RunService.Heartbeat:Connect(function(dt)
+	local REGEN_STEP = 0.1
+	local elapsed = 0
+	RunService.Heartbeat:Connect(function(frameDt)
+		elapsed += frameDt
+		if elapsed < REGEN_STEP then
+			return
+		end
+		local dt = elapsed
+		elapsed = 0
 		local now = os.clock()
 		for _, model in LagCompensation.GetTrackedModels() do
 			local humanoid = getAliveHumanoid(model)

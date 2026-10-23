@@ -23,6 +23,7 @@ local DUMMIES: { DummySpec } = {
 	{ Label = "Strafing 48", Position = Vector3.new(0, 0, -250), StrafeDistance = 40, StrafeSpeed = 48 },
 	{ Label = "280 studs", Position = Vector3.new(-30, 0, -280) },
 	{ Label = "Behind cover", Position = Vector3.new(40, 0, -90) },
+	{ Label = "Behind thin wall", Position = Vector3.new(-40, 0, -90) },
 }
 
 local RESPAWN_DELAY = 3

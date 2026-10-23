@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MatchConfig = require(ReplicatedStorage.Shared.Config.MatchConfig)
 local Net = require(ReplicatedStorage.Shared.Net)
+local DataService = require(script.Parent.DataService)
 local MapService = require(script.Parent.MapService)
 local MatchState = require(script.Parent.MatchState)
 local StatsService = require(script.Parent.StatsService)
@@ -32,6 +33,7 @@ local function kills(player: Player): number
 end
 
 local function setPhase(phase: string, duration: number)
+	MatchState.Phase = phase
 	matchFolder:SetAttribute("Phase", phase)
 	matchFolder:SetAttribute("PhaseEndsAt", workspace:GetServerTimeNow() + duration)
 end
@@ -104,7 +106,7 @@ local function respawnEveryone()
 end
 
 local function intermission()
-	table.clear(votes)
+	-- Votes cast on the results screen carry over into the warm-up.
 	matchFolder:SetAttribute("VoteOptions", table.concat(MatchConfig.Maps, ","))
 	recountVotes()
 	setPhase("Intermission", MatchConfig.IntermissionTime)
@@ -141,6 +143,21 @@ local function playMatch()
 	end
 
 	MatchState.CombatEnabled = false
+	for place, player in ranked do
+		local scored = kills(player) > 0
+		local won = player == winner
+		if won then
+			DataService.AddCoins(player, MatchConfig.Rewards.Win, "MATCH WON")
+		elseif place <= 3 and scored then
+			DataService.AddCoins(player, MatchConfig.Rewards.TopThree, `TOP 3 (#{place})`)
+		end
+		DataService.Update(player, function(profile)
+			profile.Stats.MatchesPlayed += 1
+			if won then
+				profile.Stats.Wins += 1
+			end
+		end)
+	end
 	local standings = {}
 	for i = 1, math.min(STANDINGS_SHOWN, #ranked) do
 		local player = ranked[i]

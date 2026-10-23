@@ -314,10 +314,10 @@ function MatchHud.Start()
 				showBanner("MATCH START", `{match:GetAttribute("Mode")}  ·  {mapName}`)
 				SoundController.Play("MatchStart", "UI")
 			elseif phase == "Results" then
+				-- Votes open on the results screen and carry into the warm-up.
+				myVote = nil
 				showBanner("MATCH OVER", "")
 				SoundController.Play("MatchEnd", "UI")
-			elseif phase == "Intermission" then
-				myVote = nil
 			end
 			lastPhase = phase
 		end

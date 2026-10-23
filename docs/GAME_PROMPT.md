@@ -1,18 +1,21 @@
 # Game design prompt
 
 This is the full design brief. Paste it into an AI coding assistant to keep building the game, one phase at a time.
-Phases 1-5 are already written in this project, so tell the assistant to start from Phase 6 and read the existing code first.
+Phases 1-6 are already written in this project, so tell the assistant to start from Phase 7 and read the existing code first.
+
+**Direction: arcade, not realistic.** Aim goes exactly where the crosshair is (no scope sway or hold-breath), movement is fast and forgiving, and feedback is loud and flashy.
 
 Ideas added while building (already in the game):
 - Kill tags decided by the server: HEADSHOT, NOSCOPE, QUICKSCOPE, AIRSHOT, FLOW KILL, LONGSHOT, SLICE, KNIFED.
 - Multi-kill banners: DOUBLE KILL, TRIPLE KILL, RAMPAGE.
-- Scope sway with Shift to hold breath (and a shaky penalty for holding too long).
+- Kill-based attachment unlocks, coins only for kill tags the server can verify, and Test Range dummies that don't pay out.
+- A full settings menu: sensitivity, scoped sensitivity, toggle scope/sprint, FOV, graphics quality, camera motion, crosshair editor, volumes.
 - Spawn protection bubble that ends the moment you attack.
 - A Test Range map in the vote rotation, with dummies for practice.
 
 Changes from the first version:
 - Sprint added: hold Left Shift while moving forward. Crouch/slide is C.
-- Steady scope is "hold Shift while scoped" (you can't sprint while scoped, so the key is free).
+- Scope sway and Shift-to-steady were tried and removed: the game stays arcade-style.
 - FOV is described in Roblox terms (vertical).
 - Air strafing runs at a fixed rate so the frame rate doesn't change speed gain.
 
@@ -85,7 +88,7 @@ SCOPING (fast like Krunker):
   - ADS time: 0.10-0.20 s depending on the sniper and attachments.
   - Hipfire: large random spread (about 6°) with the crosshair visibly spread open.
   - Scoped: 0 spread once ADS is 100% complete. During the scope-in animation, spread blends from hipfire to 0, so quickscopes work and reward timing.
-  - Scope overlay: a clean black vignette with a thin crosshair reticle (no fake lens dirt), plus a tiny bit of sway that settles in 0.3 s. Holding Shift while scoped steadies it for 2 s.
+  - Scope overlay: a clean black vignette with a thin crosshair reticle (no fake lens dirt). No scope sway: the shot goes exactly where the crosshair is (arcade feel). The Red Dot attachment uses an open sight instead.
   - ADS sensitivity multiplier as a setting (default 0.7).
   - Rechamber (bolt) after every shot. Firing un-scopes automatically, Krunker style, with a satisfying bolt animation and sound.
   - Getting a kill calls MovementController.OnKill() and taking damage calls MovementController.OnDamaged(), so Flow reacts to combat.
@@ -106,8 +109,8 @@ THE SNIPERS (unlocked with in-game currency):
 
 ATTACHMENTS (unlocked by kills with that sniper, NOT bought with Robux). Each slot has trade-offs; no attachment is strictly better than another:
   - SCOPE: 4x (default), 6x (more zoom, +0.02 s ADS), Red Dot (2x, -0.03 s ADS, wider view)
-  - BARREL: Suppressor (kills don't show on the minimap, quieter shot, -5% bolt speed), Muzzle Brake (less camera kick, louder), Long Barrel (+0.02 s ADS, less sway)
-  - STOCK: Light Stock (-0.02 s ADS, more sway), Heavy Stock (less sway, -4% move speed)
+  - BARREL: Suppressor (no tracer for enemies, quieter shot, -5% bolt speed), Muzzle Brake (half the recoil kick), Long Barrel (tighter hip-fire, +0.02 s ADS)
+  - STOCK: Light Stock (-0.02 s ADS, more kick), Heavy Stock (less kick, -4% move speed)
   - BOLT: Greased Bolt (-15% bolt time, -1 mag), Match Bolt (+1 mag, +10% bolt time)
   - MAG: Quick Mag (-25% reload), Extended Mag (+2 mag, +15% reload)
   Unlock requirements: 10/25/50/100/200 kills with that sniper.
@@ -124,11 +127,11 @@ ATTACHMENTS (unlocked by kills with that sniper, NOT bought with Robux). Each sl
 =====================================================
   - Must be smooth: target 60 FPS on mid-range phones and 144+ on PC. Don't do any per-frame Instance creation; pool bullets, tracers, effects and sounds.
   - Viewmodel: the client renders the arms and sniper (a separate viewmodel parented to the camera), with:
-      * Sway: follows mouse movement, smoothed with springs (src/shared/Util/Spring.luau: stiffness ~180, damping ~0.8)
+      * Gun lag: the viewmodel trails camera turns a little, smoothed with springs (src/shared/Util/Spring.luau). This is cosmetic; aim is never affected
       * Bob: tied to movement speed, turned off while scoped
       * Tilt during slides and air strafes
       * Recoil: snap back, return in 0.15 s
-      * Inspect animation (F key)
+      * Inspect animation (F key): planned for phase 7, see below
   - Camera: FOV slider 70-100 (Roblox FieldOfView is vertical; default 80 ≈ 110 horizontal on 16:9). Small FOV kick when firing. Smooth landing dip based on fall speed.
   - Lighting: Future lighting, crisp clean look. No heavy bloom, no blur, slight color correction (+0.05 contrast, +0.1 saturation). Moderate SunRays.
   - Tracers: a thin bright line that fades in 0.08 s. Impact effects: small sparks plus a decal by surface type (metal/concrete/wood).
@@ -246,8 +249,8 @@ PHASE 2 (DONE): VANTA sniper with ADS, quickscope, hit registration with lag com
 PHASE 3 (DONE): Feel pass (viewmodel, camera, tracers, impact effects, all sounds including the headshot/kill sounds).
 PHASE 4 (DONE): HUD, killfeed, killcam, scoreboard. Knife.
 PHASE 5 (DONE): Free-For-All match system and the Cinder Terraces map.
-PHASE 6: Data saving, coins, the other 4 snipers, the shop, attachments.
-PHASE 7: Menus, settings, mobile and controller support.
+PHASE 6 (DONE): Data saving, coins, the other 4 snipers, the shop, attachments, plus the settings menu.
+PHASE 7: Main menu (3D weapon showcase, PLAY), mobile and controller support, and INSPECT animations: press F to show off the gun. Make them flashy, not realistic: a fast spin of the rifle in the hand, a flip in the air and a catch, the bolt racked with a flourish, the scope glinting, and the skin's accent color glowing during it. Each sniper gets its own inspect style, and Legendary skins (phase 8) get a special one. Interrupt it instantly on scope, fire or switch.
 PHASE 8: Robux skins (ProcessReceipt), daily rewards, quests, codes, leaderboards, season pass, badges.
 PHASE 9: Polish and performance (profile with the MicroProfiler, fix anything over budget), exploit test (try speed hacking, firing too fast and fake hits, and confirm the server rejects them).
 

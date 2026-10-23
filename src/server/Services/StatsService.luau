@@ -6,6 +6,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local DataService = require(script.Parent.DataService)
+local MatchState = require(script.Parent.MatchState)
 
 local PING_INTERVAL = 2
 
@@ -41,6 +43,11 @@ end
 local function recordDeath(player: Player)
 	add(player, "Deaths", 1)
 	player:SetAttribute("Streak", 0)
+	if MatchState.Phase == "Playing" then
+		DataService.Update(player, function(profile)
+			profile.Stats.Deaths += 1
+		end)
+	end
 end
 
 function StatsService.Start()

@@ -3,6 +3,7 @@
 -- Kept separate so CombatService can read it without depending on MatchService.
 
 local MatchState = {
+	Phase = "Intermission", -- "Intermission" | "Playing" | "Results"
 	CombatEnabled = true, -- off on the results screen
 }
 

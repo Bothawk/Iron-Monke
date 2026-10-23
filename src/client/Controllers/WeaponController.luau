@@ -1,6 +1,6 @@
 --!strict
--- The client side of the sniper: scoping, quickscopes, scope sway and Shift to
--- steady, firing, bolt and reload, recoil and viewmodel motion. Shots raycast here
+-- The client side of the snipers: scoping, quickscopes, firing (bolt-action,
+-- two-shot or semi-auto), reload, recoil and viewmodel motion. Shots are cast here
 -- for instant feedback, then the server re-checks them before any damage happens.
 -- Also owns which weapon is equipped; the knife itself lives in KnifeController.
 
@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
+local Ballistics = require(ReplicatedStorage.Shared.Combat.Ballistics)
 local Hitboxes = require(ReplicatedStorage.Shared.Combat.Hitboxes)
 local KillTags = require(ReplicatedStorage.Shared.Combat.KillTags)
 local MovementConfig = require(ReplicatedStorage.Shared.Config.MovementConfig)
@@ -16,7 +17,10 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local Spring = require(ReplicatedStorage.Shared.Util.Spring)
 local WeaponConfig = require(ReplicatedStorage.Shared.Config.WeaponConfig)
+local WeaponStats = require(ReplicatedStorage.Shared.Combat.WeaponStats)
 local MovementController = require(script.Parent.MovementController)
+local ProfileController = require(script.Parent.ProfileController)
+local SettingsController = require(script.Parent.SettingsController)
 local Tracers = require(script.Parent.Parent.Weapon.Tracers)
 local Viewmodel = require(script.Parent.Parent.Weapon.Viewmodel)
 
@@ -24,19 +28,18 @@ local player = Players.LocalPlayer
 
 local FIRE_INPUTS = { Enum.UserInputType.MouseButton1 }
 local FIRE_BUTTONS = { Enum.KeyCode.ButtonR2 }
+local SCOPE_INPUTS = { Enum.UserInputType.MouseButton2 }
+local SCOPE_BUTTONS = { Enum.KeyCode.ButtonL2 }
 local RELOAD_KEYS = { Enum.KeyCode.R, Enum.KeyCode.ButtonX }
-local SCOPE_BUTTON = Enum.KeyCode.ButtonL2
-local STEADY_KEYS = { Enum.KeyCode.LeftShift }
-local STEADY_BUTTONS = { Enum.KeyCode.ButtonL3 }
 local SNIPER_KEYS = { Enum.KeyCode.One }
 local KNIFE_KEYS = { Enum.KeyCode.Three }
 local TOGGLE_KEYS = { Enum.KeyCode.Q, Enum.KeyCode.ButtonY }
 
-local KICK_BACK = 0.35 -- studs
+local KICK_BACK = 0.35 -- studs, at Kick = 1
 local KICK_PITCH = math.rad(6)
 local BOLT_DIP = math.rad(8)
 local RELOAD_DIP = math.rad(35)
-local SWAY_SCALE = 0.02 -- radians of gun sway per radian/s of camera turn
+local SWAY_SCALE = 0.02 -- radians the gun lags per radian/s of camera turn
 local SWAY_LIMIT = math.rad(5)
 local BOB_AMOUNT = 0.035
 local BOB_SPEED = 0.55 -- bob cycles per stud travelled
@@ -51,40 +54,37 @@ export type ShotInfo = {
 	Normal: Vector3?,
 	Material: Enum.Material?,
 	HitCharacter: boolean,
+	Kick: number,
 }
 
 local WeaponController = {}
 
 -- Read by the HUD and camera every frame.
 WeaponController.State = {
-	WeaponId = WeaponConfig.DefaultWeapon,
-	Ammo = WeaponConfig.Weapons[WeaponConfig.DefaultWeapon].MagSize,
+	Stats = ProfileController.GetLifeStats(),
+	Ammo = ProfileController.GetLifeStats().MagSize,
 	Reloading = false,
 	ReloadProgress = 0,
 	AdsAlpha = 0,
 	Scoped = false,
-	Spread = WeaponConfig.HipfireSpread,
+	Spread = ProfileController.GetLifeStats().HipfireSpread,
 	Alive = false,
 	Equipped = "Sniper" :: Slot,
 	SwitchProgress = 1, -- 0..1 through the current weapon switch; 1 = done
-	AimSway = Vector2.zero, -- radians (yaw, pitch) the scoped view drifts; shots follow it
-	Steadying = false,
-	SteadyRemaining = WeaponConfig.Sway.SteadyDuration,
 	HeadshotStreak = 0,
 }
 
 WeaponController.Fired = Signal.new() -- (info: ShotInfo)
-WeaponController.Hit = Signal.new() -- (zone: Hitboxes.Zone, killed: boolean) predicted on hit, again on a confirmed kill
-WeaponController.Killed = Signal.new() -- (result: { Zone, Distance, Tags }) server-confirmed
+WeaponController.Hit = Signal.new() -- (zone, killed) predicted on hit, again on a confirmed kill
+WeaponController.Killed = Signal.new() -- (result: { Zone, Distance, Tags, Weapon }) server-confirmed
 WeaponController.Damaged = Signal.new() -- (info: table) this player took damage
 WeaponController.ReloadStarted = Signal.new()
 WeaponController.ReloadFinished = Signal.new()
 WeaponController.ScopedIn = Signal.new()
-WeaponController.BoltFinished = Signal.new()
+WeaponController.BoltStarted = Signal.new() -- the bolt is being worked after a cycle
 WeaponController.EquipChanged = Signal.new() -- (slot: Slot)
 
 local state = WeaponController.State
-local Sway = WeaponConfig.Sway
 
 local fireShot = Net.Event(Net.Names.FireShot)
 local reloadEvent = Net.Event(Net.Names.Reload)
@@ -95,15 +95,18 @@ local tookDamage = Net.Event(Net.Names.TookDamage)
 local random = Random.new()
 local viewmodel = Viewmodel.new("Sniper")
 local character: Model? = nil
+local worldWeaponParts: { BasePart } = {}
 
+local nextShotAt = -math.huge
+local shotsInCycle = 0
 local boltStartedAt = -math.huge
-local boltEndsAt = -math.huge
+local boltEndsAt = -math.huge -- only set when a cycle ends (for the bolt animation)
 local reloadStartedAt = -math.huge
 local reloadEndsAt = -math.huge
 local scopedAt = -math.huge -- when the scope last finished coming up
-local exhaustedUntil = -math.huge -- after holding breath too long, steadying is locked out
 local switchStartedAt = -math.huge
 local previousSlot: Slot = "Sniper"
+local scopeToggled = false
 
 local kickBack = Spring.new(0, 220, 0.75)
 local kickPitch = Spring.new(0, 220, 0.75)
@@ -111,10 +114,9 @@ local swayYaw = Spring.new(0, 120, 0.85)
 local swayPitch = Spring.new(0, 120, 0.85)
 local lastLook: Vector3? = nil
 local bobPhase = 0
-local swayClock = 0
 
-local function weapon(): WeaponConfig.Weapon
-	return WeaponConfig.Weapons[state.WeaponId]
+local function stats(): WeaponStats.Stats
+	return state.Stats
 end
 
 local function zoomedFov(fov: number, zoom: number): number
@@ -124,25 +126,11 @@ end
 -- The camera calls this after its own FOV smoothing so the scope zoom snaps in.
 function WeaponController.ApplyZoom(fov: number): number
 	if state.Scoped then
-		return zoomedFov(fov, weapon().Zoom)
+		return zoomedFov(fov, stats().Zoom)
 	elseif state.AdsAlpha > 0 then
 		return zoomedFov(fov, 1 + (SCOPING_ZOOM - 1) * state.AdsAlpha)
 	end
 	return fov
-end
-
-local function isAnyDown(keys: { Enum.KeyCode }, buttons: { Enum.KeyCode }): boolean
-	for _, key in keys do
-		if UserInputService:IsKeyDown(key) then
-			return true
-		end
-	end
-	for _, button in buttons do
-		if UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, button) then
-			return true
-		end
-	end
-	return false
 end
 
 local function spreadDirection(cframe: CFrame, spreadDegrees: number): Vector3
@@ -153,30 +141,6 @@ local function spreadDirection(cframe: CFrame, spreadDegrees: number): Vector3
 	local angle = math.rad(spreadDegrees) * math.sqrt(random:NextNumber())
 	local roll = random:NextNumber() * 2 * math.pi
 	return (cframe * CFrame.Angles(0, 0, roll) * CFrame.Angles(angle, 0, 0)).LookVector
-end
-
--- Raycasts the shot, passing through hats and other accessories.
-local function castShot(origin: Vector3, direction: Vector3): RaycastResult?
-	local ignore: { Instance } = { workspace.CurrentCamera }
-	if character then
-		table.insert(ignore, character)
-	end
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-
-	for _ = 1, 4 do
-		params.FilterDescendantsInstances = ignore
-		local hit = workspace:Raycast(origin, direction * WeaponConfig.MaxRange, params)
-		if not hit then
-			return nil
-		end
-		local accessory = hit.Instance:FindFirstAncestorOfClass("Accessory")
-		if not accessory then
-			return hit
-		end
-		table.insert(ignore, accessory)
-	end
-	return nil
 end
 
 -- If the part belongs to a living character, returns that character and the
@@ -226,6 +190,7 @@ function WeaponController.Equip(slot: Slot)
 	switchStartedAt = os.clock()
 	state.SwitchProgress = 0
 	state.AdsAlpha = 0
+	scopeToggled = false
 	equipEvent:FireServer(slot)
 	MovementController.SetKnifeEquipped(slot == "Knife")
 	WeaponController.EquipChanged:Fire(slot)
@@ -238,19 +203,20 @@ end
 
 local function startReload()
 	local now = os.clock()
-	if not sniperReady() or state.Reloading or state.Ammo >= weapon().MagSize or now < boltEndsAt then
+	if not sniperReady() or state.Reloading or state.Ammo >= stats().MagSize or now < nextShotAt then
 		return
 	end
 	state.Reloading = true
+	scopeToggled = false
 	reloadStartedAt = now
-	reloadEndsAt = now + weapon().ReloadTime
+	reloadEndsAt = now + stats().ReloadTime
 	reloadEvent:FireServer()
 	WeaponController.ReloadStarted:Fire()
 end
 
 local function fire()
 	local now = os.clock()
-	if not sniperReady() or state.Reloading or now < boltEndsAt then
+	if not sniperReady() or state.Reloading or now < nextShotAt then
 		return
 	end
 	if state.Ammo <= 0 then
@@ -258,10 +224,15 @@ local function fire()
 		return
 	end
 
+	local weapon = stats()
 	local camera = workspace.CurrentCamera
 	local origin = camera.CFrame.Position
 	local direction = spreadDirection(camera.CFrame, state.Spread)
-	local hit = castShot(origin, direction)
+	local ignore: { Instance } = { camera }
+	if character then
+		table.insert(ignore, character)
+	end
+	local hit = Ballistics.Cast(origin, direction, WeaponConfig.MaxRange, ignore, weapon.Penetration).Hit
 
 	local victim: Model?, partName: string? = nil, nil
 	if hit then
@@ -279,8 +250,17 @@ local function fire()
 	fireShot:FireServer(origin, direction, workspace:GetServerTimeNow(), victim, partName, context)
 
 	state.Ammo -= 1
-	boltStartedAt = now
-	boltEndsAt = now + weapon().BoltTime
+	shotsInCycle += 1
+	nextShotAt = now + WeaponStats.NextShotDelay(weapon, shotsInCycle)
+	local cycleDone = shotsInCycle >= weapon.ShotsPerCycle
+	if cycleDone then
+		shotsInCycle = 0
+		boltStartedAt = now
+		boltEndsAt = nextShotAt
+		if weapon.FireMode == "Bolt" then
+			WeaponController.BoltStarted:Fire()
+		end
+	end
 
 	local endPoint = if hit then hit.Position else origin + direction * WeaponConfig.MaxRange
 	-- When scoped the gun is hidden, so the tracer starts just under the view instead.
@@ -289,8 +269,13 @@ local function fire()
 		else viewmodel:GetMuzzlePosition()
 	Tracers.Show(tracerStart, endPoint)
 
-	kickBack:Impulse(KICK_BACK * 30)
-	kickPitch:Impulse(KICK_PITCH * 30)
+	kickBack:Impulse(KICK_BACK * 30 * weapon.Kick)
+	kickPitch:Impulse(KICK_PITCH * 30 * weapon.Kick)
+
+	if cycleDone and weapon.UnscopeOnFire then
+		-- Krunker-style: drop out of the scope while the bolt is worked.
+		state.AdsAlpha = math.min(state.AdsAlpha, 0.99)
+	end
 
 	WeaponController.Fired:Fire({
 		Origin = origin,
@@ -299,6 +284,7 @@ local function fire()
 		Normal = if hit then hit.Normal else nil,
 		Material = if hit then hit.Material else nil,
 		HitCharacter = victim ~= nil,
+		Kick = weapon.Kick,
 	} :: ShotInfo)
 
 	if victim and partName then
@@ -311,16 +297,45 @@ local function fire()
 	end
 end
 
-local function isScopeHeld(): boolean
-	return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-		or UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, SCOPE_BUTTON)
+local function scopeInputHeld(): boolean
+	for _, input in SCOPE_INPUTS do
+		if UserInputService:IsMouseButtonPressed(input) then
+			return true
+		end
+	end
+	for _, button in SCOPE_BUTTONS do
+		if UserInputService:IsGamepadButtonDown(Enum.UserInputType.Gamepad1, button) then
+			return true
+		end
+	end
+	return false
+end
+
+-- The menu frees the mouse; right-clicking in it shouldn't scope.
+local function menuOpen(): boolean
+	local playerGui = player:FindFirstChildOfClass("PlayerGui")
+	local menu = playerGui and playerGui:FindFirstChild("Menu")
+	return menu ~= nil and menu:IsA("ScreenGui") and menu.Enabled
+end
+
+local function wantsScope(): boolean
+	if menuOpen() then
+		return false
+	end
+	if SettingsController.Get("ToggleScope") then
+		return scopeToggled
+	end
+	return scopeInputHeld()
 end
 
 local function updateAds(dt: number, now: number)
+	local weapon = stats()
 	local wasScoped = state.Scoped
-	local canScope = sniperReady() and not state.Reloading and now >= boltEndsAt
-	if canScope and isScopeHeld() then
-		state.AdsAlpha = math.min(1, state.AdsAlpha + dt / weapon().AdsTime)
+	-- While the bolt is being worked the scope stays down (unless the gun keeps its scope).
+	local bolting = now < boltEndsAt and weapon.UnscopeOnFire
+	local canScope = sniperReady() and not state.Reloading and not bolting
+	if canScope and wantsScope() then
+		state.AdsAlpha = math.min(1, state.AdsAlpha + dt / weapon.AdsTime)
 	else
 		state.AdsAlpha = math.max(0, state.AdsAlpha - dt / WeaponConfig.UnscopeTime)
 	end
@@ -330,73 +345,36 @@ local function updateAds(dt: number, now: number)
 		WeaponController.ScopedIn:Fire()
 	end
 	-- Spread shrinks as the scope comes up, so a well-timed quickscope is accurate.
-	state.Spread = if state.Scoped then 0 else WeaponConfig.HipfireSpread * (1 - state.AdsAlpha)
+	state.Spread = if state.Scoped then 0 else weapon.HipfireSpread * (1 - state.AdsAlpha)
 
 	MovementController.SetScoped(state.AdsAlpha > 0)
 
+	local sensitivity = SettingsController.Get("Sensitivity")
 	if state.Scoped then
-		local baseFov = MovementConfig.Camera.BaseFov
-		local ratio = math.tan(math.rad(zoomedFov(baseFov, weapon().Zoom)) / 2) / math.tan(math.rad(baseFov) / 2)
-		UserInputService.MouseDeltaSensitivity = WeaponConfig.ScopedSensitivity * ratio
+		-- Scaled by the zoom so the view moves the same distance on screen as unscoped.
+		local baseFov = SettingsController.Get("FieldOfView")
+		local ratio = math.tan(math.rad(zoomedFov(baseFov, weapon.Zoom)) / 2) / math.tan(math.rad(baseFov) / 2)
+		UserInputService.MouseDeltaSensitivity = sensitivity * SettingsController.Get("ScopedSensitivity") * ratio
 	else
-		UserInputService.MouseDeltaSensitivity = 1
+		UserInputService.MouseDeltaSensitivity = sensitivity
 	end
-end
-
--- Scoped aim drifts slowly. It's strongest right after scoping in, grows while
--- moving, and holding Shift steadies it for a couple of seconds.
-local function updateAimSway(dt: number, now: number)
-	local holding = state.Scoped and now >= exhaustedUntil and isAnyDown(STEADY_KEYS, STEADY_BUTTONS)
-	if holding then
-		state.SteadyRemaining -= dt
-		if state.SteadyRemaining <= 0 then
-			state.SteadyRemaining = 0
-			exhaustedUntil = now + Sway.ExhaustedTime
-			holding = false
-		end
-	else
-		state.SteadyRemaining = math.min(Sway.SteadyDuration, state.SteadyRemaining + dt * Sway.SteadyRegenRate)
-	end
-	state.Steadying = holding
-
-	if not state.Scoped then
-		state.AimSway = Vector2.zero
-		return
-	end
-
-	local settle = math.clamp((now - scopedAt) / Sway.SettleTime, 0, 1)
-	local amplitude = Sway.Amplitude * (1 + (Sway.ScopeInMultiplier - 1) * (1 - settle))
-	amplitude *= 1 + MovementController.State.Speed / MovementConfig.MaxSpeedCap * Sway.MovingMultiplier
-	if holding then
-		amplitude *= Sway.SteadyMultiplier
-	elseif now < exhaustedUntil then
-		amplitude *= Sway.ExhaustedMultiplier
-	end
-
-	swayClock += dt
-	local radians = math.rad(amplitude)
-	-- Two slow waves at unrelated speeds make a figure-eight that never quite repeats.
-	state.AimSway = Vector2.new(math.sin(swayClock * 1.1) * radians, math.sin(swayClock * 1.7 + 0.6) * radians * 0.7)
 end
 
 local function updateTimers(now: number)
 	if state.Reloading then
-		state.ReloadProgress = math.clamp((now - reloadStartedAt) / weapon().ReloadTime, 0, 1)
+		state.ReloadProgress = math.clamp((now - reloadStartedAt) / stats().ReloadTime, 0, 1)
 		if now >= reloadEndsAt then
 			state.Reloading = false
-			state.Ammo = weapon().MagSize
+			state.Ammo = stats().MagSize
+			shotsInCycle = 0
 			WeaponController.ReloadFinished:Fire()
 		end
 	else
 		state.ReloadProgress = 0
 	end
-	if boltEndsAt > 0 and now >= boltEndsAt and boltStartedAt > 0 then
-		boltStartedAt = -math.huge
-		WeaponController.BoltFinished:Fire()
-	end
 	state.SwitchProgress = math.clamp((now - switchStartedAt) / WeaponConfig.Knife.SwitchTime, 0, 1)
-	-- Krunker-style: an empty mag reloads by itself once the bolt is done.
-	if state.Ammo <= 0 and not state.Reloading and now >= boltEndsAt then
+	-- Krunker-style: an empty mag reloads by itself once the last shot is done.
+	if state.Ammo <= 0 and not state.Reloading and now >= nextShotAt then
 		startReload()
 	end
 end
@@ -419,15 +397,15 @@ local function updateViewmodel(dt: number, now: number)
 
 	local movement = MovementController.State
 	local bob = Vector2.zero
-	if movement.Grounded and not movement.Sliding and not state.Scoped then
+	if SettingsController.Get("ViewBob") and movement.Grounded and not movement.Sliding and not state.Scoped then
 		bobPhase += movement.Speed * dt * BOB_SPEED * math.pi
 		local strength = math.clamp(movement.Speed / MovementConfig.SprintSpeed, 0, 1) * BOB_AMOUNT
 		bob = Vector2.new(math.sin(bobPhase) * strength, -math.abs(math.cos(bobPhase)) * strength)
 	end
 
-	local bolting = now < boltEndsAt
+	local bolting = now < boltEndsAt and stats().FireMode == "Bolt"
 	local boltProgress = if bolting
-		then math.clamp((now - (boltEndsAt - weapon().BoltTime)) / weapon().BoltTime, 0, 1)
+		then math.clamp((now - boltStartedAt) / math.max(boltEndsAt - boltStartedAt, 1e-3), 0, 1)
 		else 1
 	local boltCurve = if bolting then math.sin(boltProgress * math.pi) else 0
 	local reloadCurve = if state.Reloading then math.sin(state.ReloadProgress * math.pi) else 0
@@ -448,40 +426,68 @@ end
 
 -- Other players see a gun in this character's hands; this player only sees the
 -- first-person one.
-local function hideOwnWorldWeapon()
-	local worldWeapon = character and character:FindFirstChild("WorldWeapon")
-	if not worldWeapon then
-		return
-	end
-	for _, part in worldWeapon:GetDescendants() do
-		if part:IsA("BasePart") then
-			part.LocalTransparencyModifier = 1
-		end
+local function hideWorldWeaponPart(part: Instance)
+	if part:IsA("BasePart") then
+		part.LocalTransparencyModifier = 1
+		table.insert(worldWeaponParts, part)
 	end
 end
 
-local function onCharacterAdded(newCharacter: Model)
-	character = newCharacter
-	state.Ammo = weapon().MagSize
+local function hideOwnWorldWeapon()
+	-- LocalTransparencyModifier can be reset by Roblox's camera, so reapply it.
+	for _, part in worldWeaponParts do
+		part.LocalTransparencyModifier = 1
+	end
+end
+
+local function resetForLife()
+	local weapon = stats()
+	state.Ammo = weapon.MagSize
 	state.Reloading = false
 	state.AdsAlpha = 0
 	state.Scoped = false
 	state.HeadshotStreak = 0
-	state.SteadyRemaining = Sway.SteadyDuration
+	state.Spread = weapon.HipfireSpread
+	nextShotAt = -math.huge
+	shotsInCycle = 0
+	boltEndsAt = -math.huge
+	reloadEndsAt = -math.huge
+	scopeToggled = false
+	viewmodel:SetPalette(weapon.Palette)
+	MovementController.SetWeaponSpeedMultiplier(weapon.MoveSpeedMultiplier)
+end
+
+local function onCharacterAdded(newCharacter: Model)
+	character = newCharacter
 	-- Every life starts with the sniper out.
 	state.Equipped = "Sniper"
 	state.SwitchProgress = 1
 	previousSlot = "Sniper"
 	MovementController.SetKnifeEquipped(false)
-	boltStartedAt = -math.huge
-	boltEndsAt = -math.huge
-	reloadEndsAt = -math.huge
-	exhaustedUntil = -math.huge
+	resetForLife()
+
+	table.clear(worldWeaponParts)
+	newCharacter.DescendantAdded:Connect(function(descendant)
+		if descendant:FindFirstAncestor("WorldWeapon") then
+			hideWorldWeaponPart(descendant)
+		end
+	end)
+	local existing = newCharacter:FindFirstChild("WorldWeapon")
+	if existing then
+		for _, part in existing:GetDescendants() do
+			hideWorldWeaponPart(part)
+		end
+	end
 
 	viewmodel:SetSkinColor(newCharacter)
 end
 
 function WeaponController.Start()
+	ProfileController.LoadoutChanged:Connect(function(newStats: WeaponStats.Stats)
+		state.Stats = newStats
+		resetForLife()
+	end)
+
 	player.CharacterAdded:Connect(onCharacterAdded)
 	if player.Character then
 		task.spawn(onCharacterAdded, player.Character)
@@ -500,6 +506,10 @@ function WeaponController.Start()
 		local key = input.KeyCode
 		if table.find(FIRE_INPUTS, input.UserInputType) or table.find(FIRE_BUTTONS, key) then
 			fire()
+		elseif table.find(SCOPE_INPUTS, input.UserInputType) or table.find(SCOPE_BUTTONS, key) then
+			if sniperReady() then
+				scopeToggled = not scopeToggled
+			end
 		elseif table.find(RELOAD_KEYS, key) then
 			startReload()
 		elseif table.find(SNIPER_KEYS, key) then
@@ -535,7 +545,6 @@ function WeaponController.Start()
 		hideOwnWorldWeapon()
 		updateTimers(now)
 		updateAds(dt, now)
-		updateAimSway(dt, now)
 		updateViewmodel(dt, now)
 	end)
 end

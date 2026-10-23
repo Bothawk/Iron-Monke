@@ -11,6 +11,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local Signal = require(ReplicatedStorage.Shared.Util.Signal)
+local SettingsController = require(script.Parent.SettingsController)
 
 local player = Players.LocalPlayer
 
@@ -168,7 +169,7 @@ function MovementController.AddFlow(amount: number)
 	updateTier()
 end
 
--- Called by combat code (phase 2) when this player takes damage.
+-- Called by the weapon controller when this player takes damage.
 function MovementController.OnDamaged()
 	if state.OverflowRemaining > 0 then
 		MovementController.OverflowEnded:Fire()
@@ -178,7 +179,7 @@ function MovementController.OnDamaged()
 	updateTier()
 end
 
--- Called by combat code (phase 2) when this player gets a kill.
+-- Called by the weapon controller when this player gets a kill.
 function MovementController.OnKill()
 	if not state.Grounded then
 		MovementController.AddFlow(Config.Flow.AirKill)
@@ -196,12 +197,19 @@ end
 
 local scoped = false
 local knifeEquipped = false
+local weaponSpeedMultiplier = 1
+local sprintToggled = false
 local dashVelocity: Vector3? = nil
 local dashEndsAt = -math.huge
 
 -- Knife out: faster on the ground, slower Flow drain, shorter slide cooldown.
 function MovementController.SetKnifeEquipped(equipped: boolean)
 	knifeEquipped = equipped
+end
+
+-- Heavier snipers walk a little slower, lighter ones a little faster.
+function MovementController.SetWeaponSpeedMultiplier(multiplier: number)
+	weaponSpeedMultiplier = multiplier
 end
 
 -- A short burst in a direction (the knife lunge). It ignores the speed cap while
@@ -226,7 +234,7 @@ function MovementController.SetScoped(isScoped: boolean)
 end
 
 local function groundMaxSpeed(): number
-	local multiplier = if knifeEquipped then Config.KnifeSpeedMultiplier else 1
+	local multiplier = if knifeEquipped then Config.KnifeSpeedMultiplier else weaponSpeedMultiplier
 	if state.Crouching then
 		return math.min(Config.CrouchSpeed, if scoped then Config.ScopedSpeed else math.huge) * multiplier
 	elseif scoped then
@@ -341,7 +349,14 @@ local function step(dt: number)
 	local now = os.clock()
 	local wish, forwardInput = getWishDirection()
 	local crouchHeld = isBindDown(Config.Keybinds.Crouch)
-	local sprintHeld = isBindDown(Config.Keybinds.Sprint) and forwardInput >= Config.SprintMinForwardInput
+	local movingForward = forwardInput >= Config.SprintMinForwardInput
+	if not movingForward then
+		sprintToggled = false
+	end
+	local sprintPressed = if SettingsController.Get("ToggleSprint")
+		then sprintToggled
+		else isBindDown(Config.Keybinds.Sprint)
+	local sprintHeld = sprintPressed and movingForward
 	if not crouchHeld then
 		slideNeedsRelease = false
 	end
@@ -534,6 +549,8 @@ function MovementController.Start()
 		end
 		if isBindKey(Config.Keybinds.Jump, input.KeyCode) then
 			jumpPressedAt = os.clock()
+		elseif isBindKey(Config.Keybinds.Sprint, input.KeyCode) then
+			sprintToggled = not sprintToggled
 		end
 	end)
 

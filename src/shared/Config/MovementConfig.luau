@@ -84,8 +84,7 @@ local MovementConfig = {
 	},
 
 	Camera = {
-		-- Roblox FieldOfView is vertical. 80 vertical is about 110 horizontal on a 16:9 screen.
-		BaseFov = 80,
+		-- The base field of view is a player setting (SettingsConfig: FieldOfView).
 		SlideFovBoost = 3,
 		SprintFovBoost = 3,
 		SlideDrop = 1.5,

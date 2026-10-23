@@ -42,6 +42,8 @@ local function makePart(name: string, size: Vector3, color: Color3): Part
 	part.CanTouch = false
 	part.Massless = true
 	part.CastShadow = true
+	-- Remembered so SetPalette knows which color each part takes.
+	part:SetAttribute("Role", if color == PRIMARY then "Primary" elseif color == ACCENT then "Accent" else "Secondary")
 	return part
 end
 
@@ -93,6 +95,27 @@ local function attach(character: Model)
 
 	model.Parent = character
 	WorldWeaponService.SetEquipped(character, "Sniper")
+end
+
+-- Recolors the third-person sniper to match the equipped weapon (or skin).
+function WorldWeaponService.SetPalette(
+	character: Model,
+	palette: { Primary: Color3, Secondary: Color3, Accent: Color3 }
+)
+	local model = character:FindFirstChild("WorldWeapon")
+	local sniper = model and model:FindFirstChild("Sniper")
+	if not sniper then
+		return
+	end
+	for _, part in sniper:GetChildren() do
+		if part:IsA("BasePart") then
+			local role = part:GetAttribute("Role")
+			part.Color = if role == "Accent"
+				then palette.Accent
+				elseif role == "Primary" then palette.Primary
+				else palette.Secondary
+		end
+	end
 end
 
 -- Shows the equipped weapon and tells clients which arm pose to use.

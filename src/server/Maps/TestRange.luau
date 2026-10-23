@@ -179,7 +179,11 @@ end
 
 -- Dummies are added by TestDummyService. This builds the cover wall and signs.
 local function buildShootingRange(map: Instance)
-	makePart(map, "RangeCover", Vector3.new(30, 14, 2), CFrame.new(35, 7, -75))
+	-- Thicker than any sniper can shoot through.
+	makePart(map, "RangeCover", Vector3.new(30, 14, 5), CFrame.new(35, 7, -75))
+	-- Thin enough for HARPOON to shoot through (at half damage).
+	makePart(map, "ThinWall", Vector3.new(30, 14, 1), CFrame.new(-40, 7, -75))
+	makeSign(map, "THIN WALL: only HARPOON shoots through", Vector3.new(-40, 17, -74), Vector3.new(0, 17, 0))
 	makeSign(map, "SHOOTING RANGE: turn around", Vector3.new(0, 16, 12), Vector3.new(0, 16, 0))
 	makeSign(map, "COVER TEST: must NOT be hittable from here", Vector3.new(35, 17, -74), Vector3.new(0, 17, 0))
 end
