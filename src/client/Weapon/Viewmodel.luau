@@ -1,13 +1,24 @@
 --!strict
--- The first-person sniper, built from parts as placeholder art until the real
--- model arrives in phase 3. It's moved with the camera every frame.
+-- The first-person sniper and arms, built from parts so it needs no uploaded model.
+-- Colors come from a palette, so skins (phase 8) only swap the palette.
+
+export type Palette = {
+	Primary: Color3,
+	Secondary: Color3,
+	Accent: Color3,
+	Material: Enum.Material,
+}
+
+type Role = "Primary" | "Secondary" | "Accent" | "Skin" | "Sleeve"
 
 type PartSpec = {
 	Name: string,
 	Size: Vector3,
 	Offset: CFrame,
-	Color: Color3,
-	Material: Enum.Material?,
+	Role: Role,
+	Material: Enum.Material?, -- overrides the palette material
+	Shape: Enum.PartType?,
+	MovesWithBolt: boolean?,
 }
 
 export type Pose = {
@@ -20,48 +31,141 @@ export type Pose = {
 	Bob: Vector2, -- studs (x, y) from walking
 }
 
-local GUNMETAL = Color3.fromRGB(58, 60, 66)
-local DARK = Color3.fromRGB(28, 29, 33)
-local ACCENT = Color3.fromRGB(255, 140, 40)
+local DEFAULT_PALETTE: Palette = {
+	Primary = Color3.fromRGB(58, 60, 66),
+	Secondary = Color3.fromRGB(28, 29, 33),
+	Accent = Color3.fromRGB(255, 140, 40),
+	Material = Enum.Material.SmoothPlastic,
+}
+local SLEEVE_COLOR = Color3.fromRGB(34, 36, 42)
+local DEFAULT_SKIN = Color3.fromRGB(234, 184, 146)
 
 local SCOPE_HEIGHT = 0.3 -- scope center above the body's center line
 
+-- A box stretched between two points, for arms.
+local function limb(from: Vector3, to: Vector3): (Vector3, CFrame)
+	local length = (to - from).Magnitude
+	return Vector3.new(0.3, 0.3, length), CFrame.lookAt((from + to) / 2, to)
+end
+
+local RIGHT_HAND = Vector3.new(0.02, -0.38, 0.62)
+local RIGHT_ELBOW = Vector3.new(0.55, -1.0, 2.1)
+local LEFT_HAND = Vector3.new(0, -0.25, -1.05)
+local LEFT_ELBOW = Vector3.new(-0.7, -0.95, -0.15)
+local rightArmSize, rightArmOffset = limb(RIGHT_ELBOW, RIGHT_HAND)
+local leftArmSize, leftArmOffset = limb(LEFT_ELBOW, LEFT_HAND)
+
 local PARTS: { PartSpec } = {
-	{ Name = "Body", Size = Vector3.new(0.28, 0.32, 2), Offset = CFrame.new(0, 0, 0), Color = GUNMETAL },
+	-- Receiver and chassis
+	{ Name = "Body", Size = Vector3.new(0.26, 0.3, 1.9), Offset = CFrame.new(0, 0, 0), Role = "Primary" },
+	{ Name = "Chassis", Size = Vector3.new(0.22, 0.12, 1.4), Offset = CFrame.new(0, -0.2, -0.2), Role = "Secondary" },
+	{ Name = "Rail", Size = Vector3.new(0.12, 0.04, 1.1), Offset = CFrame.new(0, 0.17, -0.15), Role = "Secondary" },
+
+	-- Barrel
 	{
 		Name = "Barrel",
-		Size = Vector3.new(0.11, 0.11, 1.7),
-		Offset = CFrame.new(0, 0.06, -1.85),
-		Color = DARK,
+		Size = Vector3.new(0.1, 0.1, 1.8),
+		Offset = CFrame.new(0, 0.06, -1.9),
+		Role = "Secondary",
 		Material = Enum.Material.Metal,
 	},
-	{ Name = "Muzzle", Size = Vector3.new(0.17, 0.17, 0.25), Offset = CFrame.new(0, 0.06, -2.75), Color = DARK },
-	{ Name = "Scope", Size = Vector3.new(0.2, 0.2, 0.95), Offset = CFrame.new(0, SCOPE_HEIGHT, -0.15), Color = DARK },
+	{
+		Name = "MuzzleBrake",
+		Size = Vector3.new(0.18, 0.16, 0.3),
+		Offset = CFrame.new(0, 0.06, -2.85),
+		Role = "Secondary",
+	},
+	{
+		Name = "MuzzlePorts",
+		Size = Vector3.new(0.19, 0.04, 0.08),
+		Offset = CFrame.new(0, 0.06, -2.8),
+		Role = "Accent",
+		Material = Enum.Material.Neon,
+	},
+
+	-- Scope
+	{
+		Name = "ScopeTube",
+		Size = Vector3.new(0.18, 0.18, 1),
+		Offset = CFrame.new(0, SCOPE_HEIGHT, -0.15),
+		Role = "Secondary",
+	},
 	{
 		Name = "ScopeFront",
-		Size = Vector3.new(0.26, 0.26, 0.14),
-		Offset = CFrame.new(0, SCOPE_HEIGHT, -0.62),
-		Color = DARK,
+		Size = Vector3.new(0.26, 0.26, 0.22),
+		Offset = CFrame.new(0, SCOPE_HEIGHT, -0.68),
+		Role = "Secondary",
+	},
+	{
+		Name = "ScopeRear",
+		Size = Vector3.new(0.22, 0.22, 0.16),
+		Offset = CFrame.new(0, SCOPE_HEIGHT, 0.4),
+		Role = "Secondary",
 	},
 	{
 		Name = "ScopeLens",
-		Size = Vector3.new(0.18, 0.18, 0.02),
-		Offset = CFrame.new(0, SCOPE_HEIGHT, -0.7),
-		Color = ACCENT,
+		Size = Vector3.new(0.2, 0.2, 0.02),
+		Offset = CFrame.new(0, SCOPE_HEIGHT, -0.8),
+		Role = "Accent",
 		Material = Enum.Material.Glass,
 	},
-	{ Name = "Stock", Size = Vector3.new(0.22, 0.38, 0.85), Offset = CFrame.new(0, -0.08, 1.35), Color = GUNMETAL },
+	{
+		Name = "ScopeTurret",
+		Size = Vector3.new(0.08, 0.1, 0.1),
+		Offset = CFrame.new(0, SCOPE_HEIGHT + 0.13, -0.15),
+		Role = "Primary",
+	},
+
+	-- Stock and grip
+	{ Name = "Stock", Size = Vector3.new(0.2, 0.36, 0.9), Offset = CFrame.new(0, -0.08, 1.35), Role = "Primary" },
+	{
+		Name = "StockStripe",
+		Size = Vector3.new(0.205, 0.05, 0.6),
+		Offset = CFrame.new(0, 0.02, 1.35),
+		Role = "Accent",
+		Material = Enum.Material.Neon,
+	},
+	{ Name = "CheekRest", Size = Vector3.new(0.16, 0.1, 0.5), Offset = CFrame.new(0, 0.15, 1.2), Role = "Secondary" },
+	{ Name = "ButtPad", Size = Vector3.new(0.22, 0.42, 0.08), Offset = CFrame.new(0, -0.08, 1.82), Role = "Secondary" },
 	{
 		Name = "Grip",
-		Size = Vector3.new(0.16, 0.38, 0.2),
+		Size = Vector3.new(0.15, 0.38, 0.2),
 		Offset = CFrame.new(0, -0.3, 0.55) * CFrame.Angles(math.rad(-15), 0, 0),
-		Color = DARK,
+		Role = "Secondary",
 	},
-	{ Name = "Mag", Size = Vector3.new(0.18, 0.34, 0.3), Offset = CFrame.new(0, -0.3, -0.3), Color = DARK },
-	{ Name = "Bolt", Size = Vector3.new(0.26, 0.06, 0.06), Offset = CFrame.new(0.17, 0.1, 0.35), Color = ACCENT },
+	{
+		Name = "TriggerGuard",
+		Size = Vector3.new(0.06, 0.08, 0.3),
+		Offset = CFrame.new(0, -0.22, 0.3),
+		Role = "Secondary",
+	},
+	{ Name = "Mag", Size = Vector3.new(0.17, 0.34, 0.32), Offset = CFrame.new(0, -0.32, -0.3), Role = "Secondary" },
+
+	-- Bolt
+	{
+		Name = "BoltHandle",
+		Size = Vector3.new(0.24, 0.05, 0.05),
+		Offset = CFrame.new(0.16, 0.1, 0.35),
+		Role = "Accent",
+		MovesWithBolt = true,
+	},
+	{
+		Name = "BoltKnob",
+		Size = Vector3.new(0.1, 0.1, 0.1),
+		Offset = CFrame.new(0.29, 0.1, 0.35),
+		Role = "Accent",
+		Shape = Enum.PartType.Ball,
+		MovesWithBolt = true,
+	},
+
+	-- Arms
+	{ Name = "RightArm", Size = rightArmSize, Offset = rightArmOffset, Role = "Sleeve" },
+	{ Name = "RightHand", Size = Vector3.new(0.3, 0.32, 0.34), Offset = CFrame.new(RIGHT_HAND), Role = "Skin" },
+	{ Name = "LeftArm", Size = leftArmSize, Offset = leftArmOffset, Role = "Sleeve" },
+	{ Name = "LeftHand", Size = Vector3.new(0.32, 0.26, 0.34), Offset = CFrame.new(LEFT_HAND), Role = "Skin" },
 }
 
-local MUZZLE_OFFSET = CFrame.new(0, 0.06, -2.9)
+local MUZZLE_OFFSET = CFrame.new(0, 0.06, -3.05)
 local BOLT_TRAVEL = 0.3
 local HIP_OFFSET = CFrame.new(0.75, -0.75, -1.7)
 local ADS_OFFSET = CFrame.new(0, -SCOPE_HEIGHT, -1.1)
@@ -75,6 +179,8 @@ export type Viewmodel = typeof(setmetatable(
 		Parts: { BasePart },
 		Handle: CFrame,
 		Visible: boolean,
+		Palette: Palette,
+		SkinColor: Color3,
 	},
 	Viewmodel
 ))
@@ -87,8 +193,7 @@ function Viewmodel.new(): Viewmodel
 		local part = Instance.new("Part")
 		part.Name = spec.Name
 		part.Size = spec.Size
-		part.Color = spec.Color
-		part.Material = spec.Material or Enum.Material.SmoothPlastic
+		part.Shape = spec.Shape or Enum.PartType.Block
 		part.Anchored = true
 		part.CanCollide = false
 		part.CanQuery = false
@@ -97,7 +202,46 @@ function Viewmodel.new(): Viewmodel
 		part.Parent = model
 		table.insert(parts, part)
 	end
-	return setmetatable({ Model = model, Parts = parts, Handle = CFrame.identity, Visible = true }, Viewmodel)
+	local self = setmetatable({
+		Model = model,
+		Parts = parts,
+		Handle = CFrame.identity,
+		Visible = true,
+		Palette = DEFAULT_PALETTE,
+		SkinColor = DEFAULT_SKIN,
+	}, Viewmodel)
+	self:ApplyColors()
+	return self
+end
+
+function Viewmodel.ApplyColors(self: Viewmodel)
+	local palette = self.Palette
+	for i, spec in PARTS do
+		local part = self.Parts[i]
+		local role = spec.Role
+		part.Color = if role == "Primary"
+			then palette.Primary
+			elseif role == "Secondary" then palette.Secondary
+			elseif role == "Accent" then palette.Accent
+			elseif role == "Skin" then self.SkinColor
+			else SLEEVE_COLOR
+		part.Material = spec.Material
+			or if role == "Skin" or role == "Sleeve" then Enum.Material.SmoothPlastic else palette.Material
+	end
+end
+
+function Viewmodel.SetPalette(self: Viewmodel, palette: Palette)
+	self.Palette = palette
+	self:ApplyColors()
+end
+
+-- Hands match the player's own skin color.
+function Viewmodel.SetSkinColor(self: Viewmodel, character: Model)
+	local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+	if hand and hand:IsA("BasePart") then
+		self.SkinColor = hand.Color
+		self:ApplyColors()
+	end
 end
 
 local function easeOut(alpha: number): number
@@ -124,13 +268,11 @@ function Viewmodel.Update(self: Viewmodel, camera: Camera, pose: Pose)
 		* CFrame.Angles(pose.KickPitch - pose.Dip + pose.Sway.Y, pose.Sway.X, 0)
 	self.Handle = camera.CFrame * offset
 
+	local boltOffset = CFrame.new(0, 0, pose.BoltPull * BOLT_TRAVEL)
 	local cframes = table.create(#PARTS)
 	for i, spec in PARTS do
 		local partCFrame = self.Handle * spec.Offset
-		if spec.Name == "Bolt" then
-			partCFrame *= CFrame.new(0, 0, pose.BoltPull * BOLT_TRAVEL)
-		end
-		cframes[i] = partCFrame
+		cframes[i] = if spec.MovesWithBolt then self.Handle * boltOffset * spec.Offset else partCFrame
 	end
 	workspace:BulkMoveTo(self.Parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
 end

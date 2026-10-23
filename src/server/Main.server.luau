@@ -9,13 +9,17 @@ local Services = script.Parent.Services
 local AntiCheatService = require(Services.AntiCheatService)
 local CombatService = require(Services.CombatService)
 local LagCompensation = require(Services.LagCompensation)
+local LightingService = require(Services.LightingService)
 local TestDummyService = require(Services.TestDummyService)
 local TestMapBuilder = require(Services.TestMapBuilder)
+local WorldWeaponService = require(Services.WorldWeaponService)
 
 workspace.Gravity = Config.Gravity
 
+LightingService.Start()
 TestMapBuilder.Build()
 AntiCheatService.Start()
 LagCompensation.Start()
 CombatService.Start()
+WorldWeaponService.Start()
 TestDummyService.Start()

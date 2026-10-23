@@ -30,7 +30,17 @@ function CameraController.Start()
 	local roll = 0
 	local fov = CameraConfig.BaseFov
 	local dip = Spring.new(0, CameraConfig.SpringStiffness, CameraConfig.SpringDamping)
-	local seenLandCount = movementState.LandCount
+	-- Firing punches the FOV and kicks the view up; both springs settle back to 0.
+	local fovPunch = Spring.new(0, CameraConfig.SpringStiffness, CameraConfig.SpringDamping)
+	local viewKick = Spring.new(0, CameraConfig.SpringStiffness, CameraConfig.SpringDamping)
+	WeaponController.Fired:Connect(function()
+		fovPunch:Impulse(CameraConfig.FireFovPunch)
+		viewKick:Impulse(math.rad(CameraConfig.FireViewKick))
+	end)
+
+	MovementController.Landed:Connect(function(fallSpeed: number)
+		dip:Impulse(-math.min(fallSpeed * CameraConfig.LandDipScale, CameraConfig.LandDipMax))
+	end)
 
 	-- Runs right after the default camera script, which rebuilds its CFrame from
 	-- scratch every frame, so the roll applied here never stacks up.
@@ -40,12 +50,6 @@ function CameraController.Start()
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		if not camera or not humanoid then
 			return
-		end
-
-		if movementState.LandCount ~= seenLandCount then
-			seenLandCount = movementState.LandCount
-			local kick = math.min(movementState.LastLandSpeed * CameraConfig.LandDipScale, CameraConfig.LandDipMax)
-			dip:Impulse(-kick)
 		end
 
 		local targetDrop = if movementState.Sliding
@@ -63,14 +67,15 @@ function CameraController.Start()
 			else 0
 		-- Negative roll leans the view to the right.
 		roll = smooth(roll, -movementState.StrafeInput * tiltAmount, CameraConfig.TiltSharpness, dt)
-		camera.CFrame *= CFrame.Angles(0, 0, math.rad(roll))
+		local sway = weaponState.AimSway
+		camera.CFrame *= CFrame.Angles(viewKick:Update(dt) + sway.Y, sway.X, math.rad(roll))
 
 		local targetFov = CameraConfig.BaseFov
 			+ Config.Flow.Tiers[movementState.Tier].FovBonus
 			+ (if movementState.Sliding then CameraConfig.SlideFovBoost else 0)
 			+ (if movementState.Sprinting then CameraConfig.SprintFovBoost else 0)
 		fov = smooth(fov, targetFov, CameraConfig.FovSharpness, dt)
-		camera.FieldOfView = WeaponController.ApplyZoom(fov)
+		camera.FieldOfView = WeaponController.ApplyZoom(fov + fovPunch:Update(dt))
 	end)
 end
 

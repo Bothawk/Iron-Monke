@@ -95,6 +95,8 @@ local MovementConfig = {
 		FovSharpness = 10,
 		LandDipScale = 0.25, -- downward camera kick per stud/s of fall speed
 		LandDipMax = 24,
+		FireFovPunch = 40, -- FOV kick speed when firing (settles in about 0.3 s)
+		FireViewKick = 25, -- upward view kick speed in degrees/s, returns to center
 		SpringStiffness = 180,
 		SpringDamping = 0.8,
 	},

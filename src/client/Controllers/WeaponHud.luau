@@ -1,6 +1,6 @@
 --!strict
 -- Combat HUD: crosshair that opens with spread, scope overlay, hitmarkers, kill
--- banner, ammo, health and a damage flash. Phase 4 restyles and extends it.
+-- banner with tags and multi-kills, ammo, health and a damage flash.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +18,10 @@ local ACCENT = Color3.fromRGB(255, 140, 40)
 local FONT = Enum.Font.GothamBold
 
 local HITMARKER_TIME = 0.2
-local KILL_BANNER_TIME = 1.4
+local KILL_BANNER_TIME = 1.6
+local MULTI_KILL_WINDOW = 4 -- kills within this many seconds of each other chain
+local MULTI_KILL_NAMES = { [2] = "DOUBLE KILL", [3] = "TRIPLE KILL" }
+local MULTI_KILL_MAX_NAME = "RAMPAGE"
 local DAMAGE_FLASH_TIME = 0.4
 local CROSSHAIR_LENGTH = 9
 local CROSSHAIR_MIN_GAP = 4
@@ -181,7 +184,19 @@ function WeaponHud.Start()
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0.5, 0.68),
 		Size = UDim2.fromOffset(500, 40),
-		TextSize = 30,
+		Font = Enum.Font.GothamBlack,
+		TextSize = 32,
+		TextTransparency = 1,
+		TextStrokeTransparency = 1,
+	})
+	local killScale = Instance.new("UIScale")
+	killScale.Parent = killBanner
+	local killDetails = label(gui, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.new(0.5, 0, 0.68, 30),
+		Size = UDim2.fromOffset(600, 22),
+		TextSize = 16,
+		TextColor3 = ACCENT,
 		TextTransparency = 1,
 		TextStrokeTransparency = 1,
 	})
@@ -228,13 +243,42 @@ function WeaponHud.Start()
 
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	local seenHits = weapon.HitCount
-	local seenKills = weapon.KillCount
-	local seenDamage = weapon.DamageCount
 	local hitShownAt = -math.huge
 	local killShownAt = -math.huge
 	local damageShownAt = -math.huge
 	local shownHealth = WeaponConfig.MaxHealth
+	local multiKill = 0
+
+	WeaponController.Hit:Connect(function(zone: string, killed: boolean)
+		hitShownAt = os.clock()
+		local color = if zone == "Head" or killed then RED else WHITE
+		for _, bar in hitBars do
+			bar.BackgroundColor3 = color
+			bar.Size = if killed then UDim2.fromOffset(13, 3) else UDim2.fromOffset(9, 2)
+		end
+	end)
+
+	WeaponController.Killed:Connect(function(result: any)
+		local now = os.clock()
+		multiKill = if now - killShownAt <= MULTI_KILL_WINDOW then multiKill + 1 else 1
+		killShownAt = now
+
+		local tags = table.clone(result.Tags) :: { string }
+		if multiKill >= 2 then
+			table.insert(tags, 1, MULTI_KILL_NAMES[multiKill] or MULTI_KILL_MAX_NAME)
+		end
+		-- The first tag is the headline; the rest go underneath with the distance.
+		local headline = table.remove(tags, 1) or "ELIMINATED"
+		table.insert(tags, `{math.floor(result.Distance + 0.5)} studs`)
+		killBanner.Text = headline
+		killBanner.TextColor3 = if headline == "ELIMINATED" then WHITE else RED
+		killDetails.Text = table.concat(tags, "  ·  ")
+		killScale.Scale = 1.35
+	end)
+
+	WeaponController.Damaged:Connect(function()
+		damageShownAt = os.clock()
+	end)
 
 	RunService.RenderStepped:Connect(function(dt)
 		local now = os.clock()
@@ -256,42 +300,20 @@ function WeaponHud.Start()
 		local diameter = viewport.Y * 0.95
 		scopeLens.Size = UDim2.fromOffset(diameter, diameter)
 
-		if weapon.HitCount ~= seenHits then
-			seenHits = weapon.HitCount
-			hitShownAt = now
-			local hit = weapon.LastHit
-			local color = if hit.Zone == "Head" or hit.Killed then RED else WHITE
-			for _, bar in hitBars do
-				bar.BackgroundColor3 = color
-				bar.Size = if hit.Killed then UDim2.fromOffset(13, 3) else UDim2.fromOffset(9, 2)
-			end
-		end
 		local hitAge = (now - hitShownAt) / HITMARKER_TIME
 		for _, bar in hitBars do
 			bar.BackgroundTransparency = math.clamp(hitAge, 0, 1)
 		end
 		hitmarker.Visible = hitAge < 1
 
-		if weapon.KillCount ~= seenKills then
-			seenKills = weapon.KillCount
-			killShownAt = now
-			local kill = weapon.LastKill
-			local headshot = kill.Zone == "Head"
-			killBanner.Text = string.format(
-				"%s  %d studs",
-				if headshot then "HEADSHOT" else "ELIMINATED",
-				math.floor(kill.Distance + 0.5)
-			)
-			killBanner.TextColor3 = if headshot then RED else WHITE
-		end
 		local killAge = (now - killShownAt) / KILL_BANNER_TIME
-		killBanner.TextTransparency = math.clamp(killAge * killAge, 0, 1)
+		local killFade = math.clamp(killAge * killAge, 0, 1)
+		killBanner.TextTransparency = killFade
 		killBanner.TextStrokeTransparency = math.clamp(0.6 + killAge, 0, 1)
-
-		if weapon.DamageCount ~= seenDamage then
-			seenDamage = weapon.DamageCount
-			damageShownAt = now
-		end
+		killDetails.TextTransparency = killFade
+		killDetails.TextStrokeTransparency = math.clamp(0.6 + killAge, 0, 1)
+		-- Pops in big and settles to normal size.
+		killScale.Scale += (1 - killScale.Scale) * (1 - math.exp(-14 * dt))
 		local damageAge = (now - damageShownAt) / DAMAGE_FLASH_TIME
 		damageFlash.BackgroundTransparency = math.clamp(0.75 + damageAge * 0.25, 0.75, 1)
 

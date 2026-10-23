@@ -12,6 +12,13 @@
         "$path": "src/server"
       }
     },
+    "Lighting": {
+      "$properties": {
+        "Technology": {
+          "Enum": 4
+        }
+      }
+    },
     "StarterPlayer": {
       "$properties": {
         "EnableMouseLockOption": false

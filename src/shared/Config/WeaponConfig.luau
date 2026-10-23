@@ -42,6 +42,19 @@ local WeaponConfig = {
 		PerSecond = 20,
 	},
 
+	-- Scoped aim drift (degrees). Shots go where the drifting crosshair points.
+	Sway = {
+		Amplitude = 0.12,
+		ScopeInMultiplier = 3, -- extra sway right after scoping in...
+		SettleTime = 0.3, -- ...which settles over this long
+		MovingMultiplier = 1, -- extra sway at top speed
+		SteadyMultiplier = 0.1, -- holding Shift
+		SteadyDuration = 2, -- how long Shift can be held
+		SteadyRegenRate = 1, -- seconds of steady regained per second not holding
+		ExhaustedTime = 1.5, -- after running out, no steadying for this long...
+		ExhaustedMultiplier = 2.5, -- ...and sway is this much worse
+	},
+
 	-- 1 = scoped sensitivity matched to the zoom, so the view moves the same
 	-- distance on screen as when unscoped. Lower is slower.
 	ScopedSensitivity = 1,

@@ -10,6 +10,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config.MovementConfig)
+local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 
 local player = Players.LocalPlayer
 
@@ -26,10 +27,17 @@ MovementController.State = {
 	Crouching = false,
 	Sprinting = false,
 	StrafeInput = 0, -- -1 left, 0 none, 1 right
-	LandCount = 0, -- increments on every landing so the camera can react
-	LastLandSpeed = 0, -- downward speed at the moment of landing
 	WallKicksUsed = 0,
 }
+
+-- Events for sounds, camera and effects.
+MovementController.Jumped = Signal.new() -- (kind: "Jump" | "PerfectHop" | "SlideJump")
+MovementController.Landed = Signal.new() -- (fallSpeed: number)
+MovementController.WallKicked = Signal.new() -- (wallNormal: Vector3)
+MovementController.SlideStarted = Signal.new() -- (boosted: boolean)
+MovementController.SlingshotLaunched = Signal.new()
+MovementController.OverflowStarted = Signal.new()
+MovementController.OverflowEnded = Signal.new()
 
 local state = MovementController.State
 
@@ -155,12 +163,16 @@ function MovementController.AddFlow(amount: number)
 	state.Flow = math.clamp(state.Flow + amount, 0, Config.Flow.Max)
 	if state.Flow >= Config.Flow.Max then
 		state.OverflowRemaining = Config.Flow.OverflowDuration
+		MovementController.OverflowStarted:Fire()
 	end
 	updateTier()
 end
 
 -- Called by combat code (phase 2) when this player takes damage.
 function MovementController.OnDamaged()
+	if state.OverflowRemaining > 0 then
+		MovementController.OverflowEnded:Fire()
+	end
 	state.OverflowRemaining = 0
 	state.Flow = math.max(0, state.Flow - Config.Flow.HitPenalty)
 	updateTier()
@@ -242,10 +254,12 @@ end
 local function startSlide(vel: Vector3, now: number): Vector3
 	state.Sliding = true
 	state.Crouching = false
-	if now - lastSlideBoostAt >= Config.Slide.BoostCooldown and vel.Magnitude > 1e-3 then
+	local boosted = now - lastSlideBoostAt >= Config.Slide.BoostCooldown and vel.Magnitude > 1e-3
+	if boosted then
 		lastSlideBoostAt = now
 		vel += vel.Unit * Config.Slide.Boost
 	end
+	MovementController.SlideStarted:Fire(boosted)
 	return vel
 end
 
@@ -321,8 +335,7 @@ local function step(dt: number)
 		landedAt = now
 		groundIdleTime = 0
 		state.WallKicksUsed = 0
-		state.LandCount += 1
-		state.LastLandSpeed = math.max(0, -lastVerticalSpeed)
+		MovementController.Landed:Fire(math.max(0, -lastVerticalSpeed))
 		slideNeedsRelease = false
 		if crouchHeld and vel.Magnitude >= Config.Slide.MinSpeed then
 			vel = startSlide(vel, now)
@@ -342,17 +355,21 @@ local function step(dt: number)
 	local jumped = false
 
 	if wantsJump and (state.Grounded or canCoyoteJump) then
+		local kind = "Jump"
 		if state.Sliding then
 			-- Slide-jump keeps all of the slide's speed.
+			kind = "SlideJump"
 			MovementController.AddFlow(Config.Flow.SlideJump)
 		elseif
 			state.Grounded
 			and now - landedAt <= Config.PerfectHopWindow
 			and vel.Magnitude >= Config.PerfectHopMinSpeed
 		then
+			kind = "PerfectHop"
 			vel *= 1 + Config.PerfectHopBonus
 			MovementController.AddFlow(Config.Flow.PerfectHop)
 		end
+		MovementController.Jumped:Fire(kind)
 		leaveGround(hum, now)
 		verticalSpeed = Config.JumpVelocity
 		jumped = true
@@ -372,6 +389,7 @@ local function step(dt: number)
 			vel += normal * Config.WallKick.Push
 			state.WallKicksUsed += 1
 			MovementController.AddFlow(Config.Flow.WallKick)
+			MovementController.WallKicked:Fire(normal)
 			leaveGround(hum, now)
 			verticalSpeed = Config.WallKick.UpVelocity
 			jumped = true
@@ -391,6 +409,7 @@ local function step(dt: number)
 				verticalSpeed = Config.Slingshot.BaseLaunch + vel.Magnitude * Config.Slingshot.SpeedToHeight
 				vel *= Config.Slingshot.HorizontalKeep
 				leaveGround(hum, now)
+				MovementController.SlingshotLaunched:Fire()
 			elseif not crouchHeld or vel.Magnitude < Config.Slide.EndSpeed then
 				state.Sliding = false
 				slideNeedsRelease = crouchHeld
@@ -420,6 +439,7 @@ local function step(dt: number)
 		if state.OverflowRemaining <= 0 then
 			state.OverflowRemaining = 0
 			state.Flow = Config.Flow.OverflowExitValue
+			MovementController.OverflowEnded:Fire()
 		end
 	elseif state.Grounded and not state.Sliding then
 		groundIdleTime += dt

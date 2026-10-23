@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Hitboxes = require(ReplicatedStorage.Shared.Combat.Hitboxes)
+local KillTags = require(ReplicatedStorage.Shared.Combat.KillTags)
 local Net = require(ReplicatedStorage.Shared.Net)
 local WeaponConfig = require(ReplicatedStorage.Shared.Config.WeaponConfig)
 local LagCompensation = require(script.Parent.LagCompensation)
@@ -107,15 +108,22 @@ local function isBlocked(shooter: Model, origin: Vector3, direction: Vector3, di
 	return hit ~= nil and hit.Distance < distance - 0.5
 end
 
-local function worldEndPoint(shooter: Model, origin: Vector3, direction: Vector3): Vector3
+local function worldHit(shooter: Model, origin: Vector3, direction: Vector3): RaycastResult?
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { shooter }
-	local hit = workspace:Raycast(origin, direction * WeaponConfig.MaxRange, params)
-	return if hit then hit.Position else origin + direction * WeaponConfig.MaxRange
+	return workspace:Raycast(origin, direction * WeaponConfig.MaxRange, params)
 end
 
-local function onFireShot(player: Player, origin: any, direction: any, shotTime: any, victim: any, partName: any)
+local function onFireShot(
+	player: Player,
+	origin: any,
+	direction: any,
+	shotTime: any,
+	victim: any,
+	partName: any,
+	rawContext: any
+)
 	if typeof(origin) ~= "Vector3" or typeof(direction) ~= "Vector3" or typeof(shotTime) ~= "number" then
 		return
 	end
@@ -170,10 +178,20 @@ local function onFireShot(player: Player, origin: any, direction: any, shotTime:
 	state.LastShotAt = serverClock
 	state.LastShotTime = shotTime
 
-	local endPoint = worldEndPoint(character, origin, direction)
+	-- Other players draw the tracer and impact. Hitting a character shows no bullet hole.
+	local hit = worldHit(character, origin, direction)
+	local effect = {
+		Origin = origin,
+		EndPoint = if hit then hit.Position else origin + direction * WeaponConfig.MaxRange,
+		Normal = if hit then hit.Normal else nil,
+		Material = if hit then hit.Material else nil,
+		HitCharacter = hit ~= nil and hit.Instance.Parent ~= nil and hit.Instance.Parent:FindFirstChildOfClass(
+			"Humanoid"
+		) ~= nil,
+	}
 	for _, other in Players:GetPlayers() do
 		if other ~= player then
-			shotEffect:FireClient(other, origin, endPoint)
+			shotEffect:FireClient(other, effect)
 		end
 	end
 
@@ -221,6 +239,7 @@ local function onFireShot(player: Player, origin: any, direction: any, shotTime:
 		Damage = damage,
 		Killed = killed,
 		Distance = distance,
+		Tags = if killed then KillTags.Compute("Sniper", zone, distance, KillTags.Sanitize(rawContext)) else {},
 	})
 
 	local victimPlayer = Players:GetPlayerFromCharacter(victim)

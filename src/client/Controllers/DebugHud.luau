@@ -1,22 +1,17 @@
 --!strict
--- Temporary test HUD: speed, Flow meter and movement state.
--- The real HUD replaces this in phase 4.
+-- Developer readout of speed, Flow and movement state. Press F3 to show or hide it.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 local Config = require(ReplicatedStorage.Shared.Config.MovementConfig)
 local MovementController = require(script.Parent.MovementController)
 
 local player = Players.LocalPlayer
 
-local TIER_COLORS = {
-	Color3.fromRGB(200, 200, 200),
-	Color3.fromRGB(90, 200, 255),
-	Color3.fromRGB(170, 110, 255),
-	Color3.fromRGB(255, 170, 40),
-}
+local TOGGLE_KEY = Enum.KeyCode.F3
 
 local DebugHud = {}
 
@@ -27,39 +22,36 @@ function DebugHud.Start()
 	gui.Name = "DebugHud"
 	gui.IgnoreGuiInset = true
 	gui.ResetOnSpawn = false
-
-	local barBack = Instance.new("Frame")
-	barBack.AnchorPoint = Vector2.new(0.5, 1)
-	barBack.Position = UDim2.new(0.5, 0, 1, -110)
-	barBack.Size = UDim2.fromOffset(320, 6)
-	barBack.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
-	barBack.BackgroundTransparency = 0.3
-	barBack.BorderSizePixel = 0
-	barBack.Parent = gui
-
-	local barFill = Instance.new("Frame")
-	barFill.Size = UDim2.fromScale(0, 1)
-	barFill.BorderSizePixel = 0
-	barFill.Parent = barBack
+	gui.Enabled = false
 
 	local label = Instance.new("TextLabel")
-	label.AnchorPoint = Vector2.new(0.5, 1)
-	label.Position = UDim2.new(0.5, 0, 1, -122)
-	label.Size = UDim2.fromOffset(600, 24)
-	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0, 0)
+	label.Position = UDim2.fromOffset(12, 60)
+	label.Size = UDim2.fromOffset(420, 120)
+	label.BackgroundColor3 = Color3.new(0, 0, 0)
+	label.BackgroundTransparency = 0.5
 	label.Font = Enum.Font.RobotoMono
-	label.TextSize = 18
+	label.TextSize = 15
 	label.TextColor3 = Color3.new(1, 1, 1)
-	label.TextStrokeTransparency = 0.6
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Top
+	Instance.new("UIPadding", label).PaddingLeft = UDim.new(0, 8)
 	label.Parent = gui
 
 	gui.Parent = player:WaitForChild("PlayerGui")
 
-	RunService.RenderStepped:Connect(function()
-		local color = TIER_COLORS[state.Tier]
-		barFill.Size = UDim2.fromScale(state.Flow / Config.Flow.Max, 1)
-		barFill.BackgroundColor3 = color
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if not gameProcessed and input.KeyCode == TOGGLE_KEY then
+			gui.Enabled = not gui.Enabled
+		end
+	end)
 
+	local fps = 60
+	RunService.RenderStepped:Connect(function(dt)
+		if not gui.Enabled then
+			return
+		end
+		fps += (1 / math.max(dt, 1e-3) - fps) * 0.05
 		local action = if state.Sliding
 			then "SLIDING"
 			elseif state.Crouching then "CROUCH"
@@ -69,9 +61,17 @@ function DebugHud.Start()
 		local tierName = if state.OverflowRemaining > 0
 			then string.format("OVERFLOW %.1fs", state.OverflowRemaining)
 			else `TIER {state.Tier - 1}`
-		label.Text =
-			string.format("SPEED %5.1f   FLOW %3d  %s   %s", state.Speed, math.floor(state.Flow), tierName, action)
-		label.TextColor3 = color
+		local cap = Config.Flow.Tiers[state.Tier].SpeedCap
+		label.Text = string.format(
+			"FPS   %d\nPING  %d ms\nSPEED %.1f / %d\nFLOW  %d  %s\nSTATE %s",
+			math.floor(fps + 0.5),
+			math.floor(player:GetNetworkPing() * 1000 + 0.5),
+			state.Speed,
+			cap,
+			math.floor(state.Flow),
+			tierName,
+			action
+		)
 	end)
 end
 
