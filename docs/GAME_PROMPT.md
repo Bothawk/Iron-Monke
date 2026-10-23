@@ -4,8 +4,9 @@ This is the full design brief. Paste it into an AI coding assistant to keep buil
 Phase 1 is already written in this project, so tell the assistant to start from Phase 2 and read the existing code first.
 
 Changes from the first version:
+- Sprint added: hold Left Shift while moving forward. Crouch/slide is C.
+- Steady scope is "hold Shift while scoped" (you can't sprint while scoped, so the key is free).
 - FOV is described in Roblox terms (vertical).
-- Crouch/slide is Left Shift or C, so "steady scope" moved to Left Ctrl.
 - Air strafing runs at a fixed rate so the frame rate doesn't change speed gain.
 
 ---
@@ -31,7 +32,8 @@ Custom movement controller on the client. It computes velocity every frame (RunS
 
 Base values:
   - Walk speed (sniper equipped): 18 studs/s
-  - Run speed (knife equipped): 24 studs/s
+  - Sprint (hold Left Shift, forward only): 25 studs/s. Can't sprint while scoped, crouching or sliding
+  - Knife equipped: all ground speeds × 1.15
   - Scoped-in speed: 10 studs/s
   - Ground acceleration: reaches max speed in about 0.12 s; ground friction stops you in about 0.1 s
   - Jump height: about 7.5 studs. Gravity 230 (Roblox default 196.2) so jumps feel snappy
@@ -43,7 +45,7 @@ BHOP / AIR STRAFING (Source-engine style):
   - Every hop needs a fresh jump press (no hold-to-hop).
 
 SLIDING:
-  - Crouch (Left Shift or C) while moving faster than 16 studs/s to slide. +6 studs/s boost on entry (0.8 s cooldown), then low friction.
+  - Crouch (C) while moving faster than 16 studs/s to slide. +6 studs/s boost on entry (0.8 s cooldown), then low friction.
   - Downhill slopes add speed (scaled by slope angle). Uphill drains speed faster.
   - Slide-jump keeps 100% of the slide's speed.
   - Camera drops 1.5 studs smoothly, tilts 3° toward the strafe direction, and FOV rises slightly.
@@ -76,7 +78,7 @@ SCOPING (fast like Krunker):
   - ADS time: 0.10-0.20 s depending on the sniper and attachments.
   - Hipfire: large random spread (about 6°) with the crosshair visibly spread open.
   - Scoped: 0 spread once ADS is 100% complete. During the scope-in animation, spread blends from hipfire to 0, so quickscopes work and reward timing.
-  - Scope overlay: a clean black vignette with a thin crosshair reticle (no fake lens dirt), plus a tiny bit of sway that settles in 0.3 s. Holding Left Ctrl while scoped steadies it for 2 s.
+  - Scope overlay: a clean black vignette with a thin crosshair reticle (no fake lens dirt), plus a tiny bit of sway that settles in 0.3 s. Holding Shift while scoped steadies it for 2 s.
   - ADS sensitivity multiplier as a setting (default 0.7).
   - Rechamber (bolt) after every shot. Firing un-scopes automatically, Krunker style, with a satisfying bolt animation and sound.
   - Getting a kill calls MovementController.OnKill() and taking damage calls MovementController.OnDamaged(), so Flow reacts to combat.
@@ -106,7 +108,7 @@ ATTACHMENTS (unlocked by kills with that sniper, NOT bought with Robux). Each sl
 =====================================================
 4. KNIFE
 =====================================================
-  - Press 3 or Q to switch (0.2 s). With the knife, movement speed is 24 instead of 18, Flow drains 50% slower, and slide-boost cooldown is 0.6 s.
+  - Press 3 or Q to switch (0.2 s). With the knife, ground speeds are × 1.15 (walk about 21, sprint about 29), Flow drains 50% slower, and slide-boost cooldown is 0.6 s.
   - Left click: quick slash (0.35 s, 50 damage, 5-stud range). Right click: lunge (dash forward 10 studs, 100 damage, 1.2 s cooldown). A lunge kill is a "Slice" (unique sound + kill banner).
   - Knife hits are checked on the server the same way as sniper shots.
 
@@ -232,7 +234,7 @@ Plan for later (build the structure to support these, but don't make them yet): 
 =====================================================
 14. BUILD PHASES (do one at a time, then stop and tell me how to test)
 =====================================================
-PHASE 1 (DONE): Movement (walk, jump, bhop, slide, wall kick, Flow meter, Slingshot) on a gray test map, plus the server speed check.
+PHASE 1 (DONE): Movement (walk, sprint, jump, bhop, slide, wall kick, Flow meter, Slingshot) on a gray test map, plus the server speed check.
 PHASE 2: VANTA sniper with ADS, quickscope, hit registration with lag compensation, damage, death/respawn. Checklist: shots never hit through walls they shouldn't, headshots at 200+ studs register at 150 ms ping.
 PHASE 3: Feel pass (viewmodel, camera, tracers, impact effects, all sounds including the headshot/kill sounds).
 PHASE 4: HUD, killfeed, killcam, scoreboard. Knife.

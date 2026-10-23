@@ -1,5 +1,5 @@
 --!strict
--- First-person camera feel: slide/crouch drop, landing dip, strafe tilt and Flow FOV.
+-- First-person camera feel: slide/crouch drop, landing dip, strafe tilt, and FOV changes for sprint, slide and Flow.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -63,6 +63,7 @@ function CameraController.Start()
 		local targetFov = CameraConfig.BaseFov
 			+ Config.Flow.Tiers[movementState.Tier].FovBonus
 			+ (if movementState.Sliding then CameraConfig.SlideFovBoost else 0)
+			+ (if movementState.Sprinting then CameraConfig.SprintFovBoost else 0)
 		fov = smooth(fov, targetFov, CameraConfig.FovSharpness, dt)
 		camera.FieldOfView = fov
 	end)

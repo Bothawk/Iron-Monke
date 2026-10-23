@@ -1,5 +1,5 @@
 --!strict
--- Client movement: bhop air strafing, slides, wall kicks, Slingshot ramps and Flow.
+-- Client movement: sprint, bhop air strafing, slides, wall kicks, Slingshot ramps and Flow.
 -- Velocity is worked out here every frame and handed to the Humanoid, so the
 -- default Roblox walk and jump feel never applies.
 
@@ -24,6 +24,7 @@ MovementController.State = {
 	Grounded = false,
 	Sliding = false,
 	Crouching = false,
+	Sprinting = false,
 	StrafeInput = 0, -- -1 left, 0 none, 1 right
 	LandCount = 0, -- increments on every landing so the camera can react
 	LastLandSpeed = 0, -- downward speed at the moment of landing
@@ -82,11 +83,13 @@ local function isBindKey(bind: { Keyboard: { Enum.KeyCode }, Gamepad: { Enum.Key
 	return table.find(bind.Keyboard, key) ~= nil or table.find(bind.Gamepad, key) ~= nil
 end
 
-local function getWishDirection(): Vector3
+-- Returns the world-space direction the player wants to move, and how much of the
+-- input is forward (used to only allow sprinting forward).
+local function getWishDirection(): (Vector3, number)
 	local move: Vector3 = if controls then controls:GetMoveVector() else Vector3.zero
 	state.StrafeInput = if move.X > 0.1 then 1 elseif move.X < -0.1 then -1 else 0
 	if move.Magnitude < 0.01 then
-		return Vector3.zero
+		return Vector3.zero, 0
 	end
 
 	local cameraCFrame = (workspace.CurrentCamera :: Camera).CFrame
@@ -99,7 +102,7 @@ local function getWishDirection(): Vector3
 	local right = forward:Cross(Vector3.yAxis)
 
 	local wish = right * move.X + forward * -move.Z
-	return if wish.Magnitude > 1 then wish.Unit else wish
+	return if wish.Magnitude > 1 then wish.Unit else wish, -move.Z
 end
 
 local function probeGround(hum: Humanoid, rootPart: BasePart): RaycastResult?
@@ -108,7 +111,12 @@ local function probeGround(hum: Humanoid, rootPart: BasePart): RaycastResult?
 		else rootPart.Size.Y / 2 + 2
 	local radius = Config.GroundProbeRadius
 	local distance = legLength + Config.GroundProbeExtra - radius
-	return workspace:Spherecast(rootPart.Position, radius, Vector3.new(0, -distance, 0), raycastParams)
+	local hit = workspace:Spherecast(rootPart.Position, radius, Vector3.new(0, -distance, 0), raycastParams)
+	-- The sphere can clip the top edge of a wall; that isn't something you can stand on.
+	if hit and hit.Normal.Y < Config.MinGroundNormalY then
+		return nil
+	end
+	return hit
 end
 
 local function probeWall(rootPart: BasePart): RaycastResult?
@@ -174,8 +182,17 @@ local function approach(current: Vector3, target: Vector3, maxDelta: number): Ve
 	return current + diff / distance * maxDelta
 end
 
+local function groundMaxSpeed(): number
+	if state.Crouching then
+		return Config.CrouchSpeed
+	elseif state.Sprinting then
+		return Config.SprintSpeed
+	end
+	return Config.WalkSpeed
+end
+
 local function groundMove(vel: Vector3, wish: Vector3, dt: number): Vector3
-	local maxSpeed = if state.Crouching then Config.CrouchSpeed else Config.WalkSpeed
+	local maxSpeed = groundMaxSpeed()
 	local target = wish * maxSpeed
 	local speedingUp = wish.Magnitude > 0 and target.Magnitude >= vel.Magnitude - 0.01
 	local rate = if speedingUp
@@ -273,8 +290,9 @@ local function step(dt: number)
 	end
 
 	local now = os.clock()
-	local wish = getWishDirection()
+	local wish, forwardInput = getWishDirection()
 	local crouchHeld = isBindDown(Config.Keybinds.Crouch)
+	local sprintHeld = isBindDown(Config.Keybinds.Sprint) and forwardInput >= Config.SprintMinForwardInput
 	if not crouchHeld then
 		slideNeedsRelease = false
 	end
@@ -371,14 +389,19 @@ local function step(dt: number)
 
 		if state.Grounded and not state.Sliding then
 			state.Crouching = crouchHeld
+			state.Sprinting = sprintHeld and not crouchHeld
 			-- Landing grace: no friction yet, so a perfect hop keeps every bit of speed.
-			local inHopWindow = now - landedAt <= Config.PerfectHopWindow and vel.Magnitude > Config.WalkSpeed
+			local inHopWindow = now - landedAt <= Config.PerfectHopWindow and vel.Magnitude > groundMaxSpeed()
 			if not inHopWindow then
 				vel = groundMove(vel, wish, dt)
 			end
 		end
 	elseif not jumped then
 		vel = airMove(vel, wish, dt)
+	end
+
+	if not state.Grounded or state.Sliding then
+		state.Sprinting = false
 	end
 
 	-- Flow drains when you stand around on the ground.
@@ -429,6 +452,7 @@ local function onCharacterAdded(character: Model)
 	state.OverflowRemaining = 0
 	state.Sliding = false
 	state.Crouching = false
+	state.Sprinting = false
 	state.Grounded = false
 	state.WallKicksUsed = 0
 	jumpPressedAt = -math.huge
@@ -442,8 +466,10 @@ function MovementController.Start()
 		require(player:WaitForChild("PlayerScripts"):WaitForChild("PlayerModule") :: ModuleScript) :: any
 	controls = playerModule:GetControls()
 
-	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
-		if gameProcessed then
+	-- gameProcessed isn't used here: the default controls also bind Space, which can
+	-- mark it as processed. Typing in a text box is the case that should be ignored.
+	UserInputService.InputBegan:Connect(function(input: InputObject)
+		if UserInputService:GetFocusedTextBox() then
 			return
 		end
 		if isBindKey(Config.Keybinds.Jump, input.KeyCode) then

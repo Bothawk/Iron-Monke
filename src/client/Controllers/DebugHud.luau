@@ -72,6 +72,7 @@ function DebugHud.Start()
 		local action = if state.Sliding
 			then "SLIDING"
 			elseif state.Crouching then "CROUCH"
+			elseif state.Sprinting then "SPRINT"
 			elseif state.Grounded then "GROUND"
 			else `AIR  kicks {state.WallKicksUsed}/{Config.WallKick.MaxKicks}`
 		local tierName = if state.OverflowRemaining > 0

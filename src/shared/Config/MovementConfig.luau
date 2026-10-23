@@ -6,7 +6,9 @@ local MovementConfig = {
 	Gravity = 230, -- Roblox default is 196.2; a bit higher makes jumps snappy
 
 	WalkSpeed = 18, -- sniper equipped
-	KnifeSpeed = 24, -- used once the knife exists (phase 4)
+	SprintSpeed = 25, -- holding sprint while moving forward
+	SprintMinForwardInput = 0.3, -- how much forward input sprinting needs (no sprinting sideways or backward)
+	KnifeSpeedMultiplier = 1.15, -- used once the knife exists (phase 4)
 	CrouchSpeed = 9,
 	GroundAccelTime = 0.12, -- time to reach WalkSpeed from standing
 	GroundStopTime = 0.1, -- time to stop from WalkSpeed
@@ -28,6 +30,7 @@ local MovementConfig = {
 
 	GroundProbeRadius = 0.9,
 	GroundProbeExtra = 0.35,
+	MinGroundNormalY = 0.5, -- surfaces steeper than about 60° don't count as ground
 
 	Slide = {
 		MinSpeed = 16,
@@ -81,6 +84,7 @@ local MovementConfig = {
 		-- Roblox FieldOfView is vertical. 80 vertical is about 110 horizontal on a 16:9 screen.
 		BaseFov = 80,
 		SlideFovBoost = 3,
+		SprintFovBoost = 3,
 		SlideDrop = 1.5,
 		CrouchDrop = 1,
 		DropSharpness = 37, -- reaches ~95% of the drop in 0.08 s
@@ -99,8 +103,12 @@ local MovementConfig = {
 			Keyboard = { Enum.KeyCode.Space },
 			Gamepad = { Enum.KeyCode.ButtonA },
 		},
+		Sprint = {
+			Keyboard = { Enum.KeyCode.LeftShift },
+			Gamepad = { Enum.KeyCode.ButtonL3 }, -- clicking the left stick
+		},
 		Crouch = {
-			Keyboard = { Enum.KeyCode.LeftShift, Enum.KeyCode.C },
+			Keyboard = { Enum.KeyCode.C },
 			Gamepad = { Enum.KeyCode.ButtonB },
 		},
 	},
