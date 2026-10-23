@@ -3,6 +3,7 @@
 -- that preview changes), SHOP (buy snipers with coins), SETTINGS and STATS.
 -- The mouse is freed while it's open. Loadout changes apply on the next spawn.
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -18,7 +19,9 @@ local Widgets = require(script.Parent.Parent.UI.Widgets)
 local player = Players.LocalPlayer
 local C = Widgets.Colors
 
-local TOGGLE_KEYS = { Enum.KeyCode.M }
+local TOGGLE_KEY = Enum.KeyCode.M
+local GAMEPAD_OPEN = Enum.KeyCode.DPadDown -- only when not already navigating a menu
+local GAMEPAD_CLOSE = Enum.KeyCode.ButtonB
 local TABS = { "LOADOUT", "SHOP", "SETTINGS", "STATS" }
 local WINDOW_SIZE = Vector2.new(860, 540)
 local TOAST_TIME = 3
@@ -543,6 +546,7 @@ function MenuController.Start()
 	end
 	Widgets.Button(header, "✕", function()
 		gui.Enabled = false
+		GuiService.SelectedObject = nil
 	end, {
 		AnchorPoint = Vector2.new(1, 0),
 		Position = UDim2.new(1, 0, 0, 0),
@@ -560,16 +564,41 @@ function MenuController.Start()
 		showToast(message, ok)
 	end)
 
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed or not table.find(TOGGLE_KEYS, input.KeyCode) then
-			return
-		end
-		gui.Enabled = not gui.Enabled
-		if gui.Enabled then
+	local function setOpen(open: boolean)
+		gui.Enabled = open
+		if open then
 			render()
+			-- Controllers navigate the menu with the D-pad, starting at the open tab.
+			if UserInputService.GamepadEnabled then
+				GuiService.SelectedObject = tabButtons[currentTab]
+			end
+		elseif GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(gui) then
+			GuiService.SelectedObject = nil
+		end
+	end
+
+	-- Lets the main menu open a specific tab.
+	MenuController.Open = function(tab: string)
+		if table.find(TABS, tab) then
+			currentTab = tab
+		end
+		setOpen(true)
+	end
+
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		local key = input.KeyCode
+		if key == TOGGLE_KEY and not gameProcessed then
+			setOpen(not gui.Enabled)
+		elseif key == GAMEPAD_OPEN and not gui.Enabled and not GuiService.SelectedObject then
+			setOpen(true)
+		elseif key == GAMEPAD_CLOSE and gui.Enabled then
+			setOpen(false)
 		end
 	end)
 end
+
+-- Replaced in Start once the menu exists.
+function MenuController.Open(_tab: string) end
 
 function MenuController.IsOpen(): boolean
 	local playerGui = player:FindFirstChildOfClass("PlayerGui")

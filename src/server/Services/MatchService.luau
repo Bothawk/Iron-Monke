@@ -14,6 +14,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local DataService = require(script.Parent.DataService)
 local MapService = require(script.Parent.MapService)
 local MatchState = require(script.Parent.MatchState)
+local PlayService = require(script.Parent.PlayService)
 local StatsService = require(script.Parent.StatsService)
 
 local STANDINGS_SHOWN = 8
@@ -99,9 +100,10 @@ local function loadMap(mapId: string)
 	matchFolder:SetAttribute("MapName", if map then map.DisplayName else mapId)
 end
 
+-- Everyone who's playing (not still in the main menu) gets a fresh spawn.
 local function respawnEveryone()
 	for _, player in Players:GetPlayers() do
-		task.spawn(player.LoadCharacter, player)
+		task.spawn(PlayService.Spawn, player)
 	end
 end
 

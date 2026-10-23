@@ -545,8 +545,6 @@ local function onCharacterAdded(player: Player, character: Model)
 end
 
 function CombatService.Start()
-	Players.RespawnTime = WeaponConfig.RespawnTime
-
 	local function onPlayerAdded(player: Player)
 		player.CharacterAdded:Connect(function(character)
 			onCharacterAdded(player, character)

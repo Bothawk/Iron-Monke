@@ -92,14 +92,20 @@ local function isBindKey(bind: { Keyboard: { Enum.KeyCode }, Gamepad: { Enum.Key
 	return table.find(bind.Keyboard, key) ~= nil or table.find(bind.Gamepad, key) ~= nil
 end
 
--- Returns the world-space direction the player wants to move, and how much of the
--- input is forward (used to only allow sprinting forward).
-local function getWishDirection(): (Vector3, number)
+local AUTO_SPRINT_STICK = 0.95 -- how far forward a stick must be pushed to auto-sprint
+
+-- Returns the world-space direction the player wants to move, how much of the
+-- input is forward (used to only allow sprinting forward), and whether that input
+-- came from an analog stick or touch thumbstick (pushed nearly all the way).
+local function getWishDirection(): (Vector3, number, boolean)
 	local move: Vector3 = if controls then controls:GetMoveVector() else Vector3.zero
 	state.StrafeInput = if move.X > 0.1 then 1 elseif move.X < -0.1 then -1 else 0
 	if move.Magnitude < 0.01 then
-		return Vector3.zero, 0
+		return Vector3.zero, 0, false
 	end
+	local inputType = UserInputService:GetLastInputType()
+	local analog = inputType == Enum.UserInputType.Touch or inputType == Enum.UserInputType.Gamepad1
+	local fullyPushed = analog and -move.Z >= AUTO_SPRINT_STICK
 
 	local cameraCFrame = (workspace.CurrentCamera :: Camera).CFrame
 	local forward = flat(cameraCFrame.LookVector)
@@ -111,7 +117,7 @@ local function getWishDirection(): (Vector3, number)
 	local right = forward:Cross(Vector3.yAxis)
 
 	local wish = right * move.X + forward * -move.Z
-	return if wish.Magnitude > 1 then wish.Unit else wish, -move.Z
+	return if wish.Magnitude > 1 then wish.Unit else wish, -move.Z, fullyPushed
 end
 
 local function probeGround(hum: Humanoid, rootPart: BasePart): RaycastResult?
@@ -199,6 +205,16 @@ local scoped = false
 local knifeEquipped = false
 local weaponSpeedMultiplier = 1
 local sprintToggled = false
+local touchCrouchHeld = false
+
+-- Touch buttons (TouchController) use these instead of keys.
+function MovementController.QueueJump()
+	jumpPressedAt = os.clock()
+end
+
+function MovementController.SetTouchCrouch(held: boolean)
+	touchCrouchHeld = held
+end
 local dashVelocity: Vector3? = nil
 local dashEndsAt = -math.huge
 
@@ -347,15 +363,15 @@ local function step(dt: number)
 	end
 
 	local now = os.clock()
-	local wish, forwardInput = getWishDirection()
-	local crouchHeld = isBindDown(Config.Keybinds.Crouch)
+	local wish, forwardInput, stickFullyForward = getWishDirection()
+	local crouchHeld = isBindDown(Config.Keybinds.Crouch) or touchCrouchHeld
 	local movingForward = forwardInput >= Config.SprintMinForwardInput
 	if not movingForward then
 		sprintToggled = false
 	end
-	local sprintPressed = if SettingsController.Get("ToggleSprint")
-		then sprintToggled
-		else isBindDown(Config.Keybinds.Sprint)
+	local sprintPressed = (
+		if SettingsController.Get("ToggleSprint") then sprintToggled else isBindDown(Config.Keybinds.Sprint)
+	) or (stickFullyForward and SettingsController.Get("AutoSprint"))
 	local sprintHeld = sprintPressed and movingForward
 	if not crouchHeld then
 		slideNeedsRelease = false

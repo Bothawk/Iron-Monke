@@ -69,6 +69,10 @@ local Events: { [string]: SoundEvent } = {
 		{ Id = "rbxasset://sounds/unsheath.wav", Volume = 0.8, Pitch = 1.6 },
 		{ Id = "rbxasset://sounds/electronicpingshort.wav", Volume = 0.5, Pitch = 1.5 },
 	},
+	Inspect = {
+		{ Id = "rbxasset://sounds/Rocket whoosh 01.wav", Volume = 0.3, Pitch = 1.8 },
+		{ Id = "rbxasset://sounds/clickfast.wav", Volume = 0.4, Pitch = 1.3 },
+	},
 	Equip = {
 		{ Id = "rbxasset://sounds/unsheath.wav", Volume = 0.35, Pitch = 1.2 },
 	},

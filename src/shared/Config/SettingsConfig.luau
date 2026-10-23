@@ -67,6 +67,25 @@ local LIST: { Setting } = {
 		Kind = "Toggle",
 		Default = false,
 	},
+	{
+		Id = "AutoSprint",
+		Label = "Auto-sprint (controller / touch)",
+		Category = "Controls",
+		Kind = "Toggle",
+		Default = true,
+		Hint = "Push the stick all the way forward to sprint",
+	},
+	{
+		Id = "TouchButtonScale",
+		Label = "Touch button size",
+		Category = "Controls",
+		Kind = "Slider",
+		Default = 1,
+		Min = 0.6,
+		Max = 1.6,
+		Step = 0.05,
+		Decimals = 2,
+	},
 
 	-- Video
 	{

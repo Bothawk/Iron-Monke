@@ -26,7 +26,8 @@ export type Kind = "Sniper" | "Knife"
 export type Pose = {
 	AdsAlpha: number, -- 0 = hip, 1 = scoped
 	Lower: number, -- 0 = held, 1 = dropped out of view (while switching weapons)
-	Extra: CFrame?, -- extra motion on top, like a knife swing
+	Extra: CFrame?, -- extra motion for weapon and hands together, like a knife swing
+	Detached: CFrame?, -- extra motion for the weapon only (inspect spins and tosses)
 	KickBack: number, -- studs pushed back by recoil
 	KickPitch: number, -- radians tipped up by recoil
 	Dip: number, -- radians tipped down (bolting, reloading)
@@ -228,6 +229,8 @@ export type Viewmodel = typeof(setmetatable(
 		Visible: boolean,
 		Palette: Palette,
 		SkinColor: Color3,
+		Glow: number,
+		ArmsVisible: boolean,
 	},
 	Viewmodel
 ))
@@ -258,6 +261,8 @@ function Viewmodel.new(kind: Kind): Viewmodel
 		Visible = true,
 		Palette = DEFAULT_PALETTE,
 		SkinColor = DEFAULT_SKIN,
+		Glow = 0,
+		ArmsVisible = true,
 	}, Viewmodel)
 	self:ApplyColors()
 	return self
@@ -265,17 +270,51 @@ end
 
 function Viewmodel.ApplyColors(self: Viewmodel)
 	local palette = self.Palette
+	local glow = self.Glow
 	for i, spec in self.Spec.Parts do
 		local part = self.Parts[i]
 		local role = spec.Role
 		part.Color = if role == "Primary"
 			then palette.Primary
 			elseif role == "Secondary" then palette.Secondary
-			elseif role == "Accent" then palette.Accent
+			elseif role == "Accent" then palette.Accent:Lerp(Color3.new(1, 1, 1), glow * 0.55)
 			elseif role == "Skin" then self.SkinColor
 			else SLEEVE_COLOR
-		part.Material = spec.Material
-			or if role == "Skin" or role == "Sleeve" then Enum.Material.SmoothPlastic else palette.Material
+		part.Material = if role == "Accent" and glow > 0.02
+			then Enum.Material.Neon
+			else spec.Material or if role == "Skin" or role == "Sleeve"
+				then Enum.Material.SmoothPlastic
+				else palette.Material
+	end
+end
+
+-- Makes the accent parts glow (0..1), used by the inspect animation.
+function Viewmodel.SetGlow(self: Viewmodel, glow: number)
+	local rounded = math.floor(glow * 20 + 0.5) / 20
+	if rounded ~= self.Glow then
+		self.Glow = rounded
+		self:ApplyColors()
+	end
+end
+
+-- The main menu shows the weapon on its own, without hands.
+function Viewmodel.SetArmsVisible(self: Viewmodel, visible: boolean)
+	self.ArmsVisible = visible
+	for i, spec in self.Spec.Parts do
+		if spec.Role == "Skin" or spec.Role == "Sleeve" then
+			self.Parts[i].Transparency = if visible then 0 else 1
+		end
+	end
+end
+
+-- Puts the weapon (not the arms) at `cframe`, for showcases outside the camera.
+function Viewmodel.PlaceAt(self: Viewmodel, cframe: CFrame)
+	self.Handle = cframe
+	-- Set one by one: the showcase lives in a ViewportFrame's own world, not Workspace.
+	for i, partSpec in self.Spec.Parts do
+		if partSpec.Role ~= "Skin" and partSpec.Role ~= "Sleeve" then
+			self.Parts[i].CFrame = cframe * partSpec.Offset
+		end
 	end
 end
 
@@ -318,14 +357,18 @@ function Viewmodel.Update(self: Viewmodel, camera: Camera, pose: Pose)
 		* CFrame.new(pose.Bob.X, pose.Bob.Y, pose.KickBack)
 		* CFrame.Angles(pose.KickPitch - pose.Dip + pose.Sway.Y, pose.Sway.X, 0)
 		* (pose.Extra or CFrame.identity)
-	self.Handle = camera.CFrame * offset
+	local hands = camera.CFrame * offset
+	-- The weapon can move on its own (inspect) while the hands stay where they are.
+	self.Handle = hands * (pose.Detached or CFrame.identity)
 
 	local boltOffset = CFrame.new(0, 0, pose.BoltPull * BOLT_TRAVEL)
 	local parts = spec.Parts
 	local cframes = table.create(#parts)
 	for i, partSpec in parts do
-		cframes[i] = if partSpec.MovesWithBolt
-			then self.Handle * boltOffset * partSpec.Offset
+		local isHand = partSpec.Role == "Skin" or partSpec.Role == "Sleeve"
+		cframes[i] = if isHand
+			then hands * partSpec.Offset
+			elseif partSpec.MovesWithBolt then self.Handle * boltOffset * partSpec.Offset
 			else self.Handle * partSpec.Offset
 	end
 	workspace:BulkMoveTo(self.Parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)

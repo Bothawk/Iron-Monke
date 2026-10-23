@@ -27,6 +27,7 @@ Net.Names = {
 	ShopAction = "ShopAction", -- client → server: buy or equip weapons and attachments
 	ShopResult = "ShopResult", -- server → owner: whether it worked and why not
 	Loadout = "Loadout", -- server → owner: weapon and attachments for this life
+	PlayRequest = "PlayRequest", -- client → server: leave the main menu and spawn
 }
 
 local function getFolder(): Instance

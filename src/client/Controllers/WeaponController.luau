@@ -2,7 +2,8 @@
 -- The client side of the snipers: scoping, quickscopes, firing (bolt-action,
 -- two-shot or semi-auto), reload, recoil and viewmodel motion. Shots are cast here
 -- for instant feedback, then the server re-checks them before any damage happens.
--- Also owns which weapon is equipped; the knife itself lives in KnifeController.
+-- Also owns which weapon is equipped (the knife itself lives in KnifeController)
+-- and the inspect animation (F).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,6 +22,7 @@ local WeaponStats = require(ReplicatedStorage.Shared.Combat.WeaponStats)
 local MovementController = require(script.Parent.MovementController)
 local ProfileController = require(script.Parent.ProfileController)
 local SettingsController = require(script.Parent.SettingsController)
+local Inspect = require(script.Parent.Parent.Weapon.Inspect)
 local Tracers = require(script.Parent.Parent.Weapon.Tracers)
 local Viewmodel = require(script.Parent.Parent.Weapon.Viewmodel)
 
@@ -34,6 +36,7 @@ local RELOAD_KEYS = { Enum.KeyCode.R, Enum.KeyCode.ButtonX }
 local SNIPER_KEYS = { Enum.KeyCode.One }
 local KNIFE_KEYS = { Enum.KeyCode.Three }
 local TOGGLE_KEYS = { Enum.KeyCode.Q, Enum.KeyCode.ButtonY }
+local INSPECT_KEYS = { Enum.KeyCode.F, Enum.KeyCode.DPadUp }
 
 local KICK_BACK = 0.35 -- studs, at Kick = 1
 local KICK_PITCH = math.rad(6)
@@ -83,6 +86,7 @@ WeaponController.ReloadFinished = Signal.new()
 WeaponController.ScopedIn = Signal.new()
 WeaponController.BoltStarted = Signal.new() -- the bolt is being worked after a cycle
 WeaponController.EquipChanged = Signal.new() -- (slot: Slot)
+WeaponController.InspectStarted = Signal.new() -- (slot: Slot)
 
 local state = WeaponController.State
 
@@ -107,6 +111,9 @@ local scopedAt = -math.huge -- when the scope last finished coming up
 local switchStartedAt = -math.huge
 local previousSlot: Slot = "Sniper"
 local scopeToggled = false
+local touchScope = false -- touch has no "hold", so its scope button always toggles
+local inspectStartedAt = -math.huge
+local inspectStyle: WeaponConfig.InspectStyle? = nil
 
 local kickBack = Spring.new(0, 220, 0.75)
 local kickPitch = Spring.new(0, 220, 0.75)
@@ -166,6 +173,44 @@ local function sniperReady(): boolean
 	return state.Alive and state.Equipped == "Sniper" and state.SwitchProgress >= 1
 end
 
+local function cancelInspect()
+	inspectStyle = nil
+end
+
+-- How far into an inspect of `slot` we are, or nil if not inspecting it.
+function WeaponController.GetInspect(slot: Slot): (WeaponConfig.InspectStyle?, number)
+	local style = inspectStyle
+	if not style or state.Equipped ~= slot then
+		return nil, 0
+	end
+	local elapsed = os.clock() - inspectStartedAt
+	if elapsed >= style.Duration then
+		inspectStyle = nil
+		return nil, 0
+	end
+	return style, elapsed
+end
+
+-- Starts the inspect for whatever is in hand. Anything else you do cancels it.
+function WeaponController.StartInspect()
+	if not state.Alive or state.SwitchProgress < 1 or inspectStyle then
+		return
+	end
+	if state.Equipped == "Sniper" then
+		if state.Reloading or state.AdsAlpha > 0 or os.clock() < nextShotAt then
+			return
+		end
+		inspectStyle = stats().Inspect
+	else
+		inspectStyle = WeaponConfig.Knife.Inspect
+	end
+	inspectStartedAt = os.clock()
+	WeaponController.InspectStarted:Fire(state.Equipped)
+end
+
+-- Used by the knife: attacking cancels an inspect too.
+WeaponController.CancelInspect = cancelInspect
+
 -- How far a weapon's viewmodel is lowered: the old one drops out during the first
 -- half of a switch and the new one comes up during the second half.
 function WeaponController.GetLower(slot: Slot): number
@@ -191,9 +236,14 @@ function WeaponController.Equip(slot: Slot)
 	state.SwitchProgress = 0
 	state.AdsAlpha = 0
 	scopeToggled = false
+	cancelInspect()
 	equipEvent:FireServer(slot)
 	MovementController.SetKnifeEquipped(slot == "Knife")
 	WeaponController.EquipChanged:Fire(slot)
+end
+
+function WeaponController.Swap()
+	WeaponController.Equip(if state.Equipped == "Sniper" then "Knife" else "Sniper")
 end
 
 local function isAlive(): boolean
@@ -208,6 +258,7 @@ local function startReload()
 	end
 	state.Reloading = true
 	scopeToggled = false
+	cancelInspect()
 	reloadStartedAt = now
 	reloadEndsAt = now + stats().ReloadTime
 	reloadEvent:FireServer()
@@ -223,6 +274,7 @@ local function fire()
 		startReload()
 		return
 	end
+	cancelInspect()
 
 	local weapon = stats()
 	local camera = workspace.CurrentCamera
@@ -322,7 +374,7 @@ local function wantsScope(): boolean
 	if menuOpen() then
 		return false
 	end
-	if SettingsController.Get("ToggleScope") then
+	if SettingsController.Get("ToggleScope") or touchScope then
 		return scopeToggled
 	end
 	return scopeInputHeld()
@@ -335,6 +387,7 @@ local function updateAds(dt: number, now: number)
 	local bolting = now < boltEndsAt and weapon.UnscopeOnFire
 	local canScope = sniperReady() and not state.Reloading and not bolting
 	if canScope and wantsScope() then
+		cancelInspect()
 		state.AdsAlpha = math.min(1, state.AdsAlpha + dt / weapon.AdsTime)
 	else
 		state.AdsAlpha = math.max(0, state.AdsAlpha - dt / WeaponConfig.UnscopeTime)
@@ -410,15 +463,23 @@ local function updateViewmodel(dt: number, now: number)
 	local boltCurve = if bolting then math.sin(boltProgress * math.pi) else 0
 	local reloadCurve = if state.Reloading then math.sin(state.ReloadProgress * math.pi) else 0
 
+	local detached, inspectBolt, glow = CFrame.identity, 0, 0
+	local style, elapsed = WeaponController.GetInspect("Sniper")
+	if style then
+		detached, inspectBolt, glow = Inspect.Pose(style, elapsed)
+	end
+	viewmodel:SetGlow(glow)
+
 	local lower = WeaponController.GetLower("Sniper")
 	viewmodel:SetVisible(state.Alive and not state.Scoped and lower < 1)
 	viewmodel:Update(camera, {
 		AdsAlpha = state.AdsAlpha,
 		Lower = lower,
+		Detached = detached,
 		KickBack = kickBack:Update(dt),
 		KickPitch = kickPitch:Update(dt),
 		Dip = boltCurve * BOLT_DIP + reloadCurve * RELOAD_DIP,
-		BoltPull = boltCurve,
+		BoltPull = math.max(boltCurve, inspectBolt),
 		Sway = Vector2.new(swayYaw:Update(dt), swayPitch:Update(dt)),
 		Bob = bob,
 	})
@@ -453,6 +514,7 @@ local function resetForLife()
 	boltEndsAt = -math.huge
 	reloadEndsAt = -math.huge
 	scopeToggled = false
+	cancelInspect()
 	viewmodel:SetPalette(weapon.Palette)
 	MovementController.SetWeaponSpeedMultiplier(weapon.MoveSpeedMultiplier)
 end
@@ -482,6 +544,22 @@ local function onCharacterAdded(newCharacter: Model)
 	viewmodel:SetSkinColor(newCharacter)
 end
 
+-- Touch buttons (TouchController) drive the same actions as keys.
+function WeaponController.Fire()
+	fire()
+end
+
+function WeaponController.Reload()
+	startReload()
+end
+
+function WeaponController.ToggleScope()
+	touchScope = true
+	if sniperReady() then
+		scopeToggled = not scopeToggled
+	end
+end
+
 function WeaponController.Start()
 	ProfileController.LoadoutChanged:Connect(function(newStats: WeaponStats.Stats)
 		state.Stats = newStats
@@ -505,6 +583,7 @@ function WeaponController.Start()
 		end
 		local key = input.KeyCode
 		if table.find(FIRE_INPUTS, input.UserInputType) or table.find(FIRE_BUTTONS, key) then
+			touchScope = false
 			fire()
 		elseif table.find(SCOPE_INPUTS, input.UserInputType) or table.find(SCOPE_BUTTONS, key) then
 			if sniperReady() then
@@ -517,7 +596,9 @@ function WeaponController.Start()
 		elseif table.find(KNIFE_KEYS, key) then
 			WeaponController.Equip("Knife")
 		elseif table.find(TOGGLE_KEYS, key) then
-			WeaponController.Equip(if state.Equipped == "Sniper" then "Knife" else "Sniper")
+			WeaponController.Swap()
+		elseif table.find(INSPECT_KEYS, key) then
+			WeaponController.StartInspect()
 		end
 	end)
 

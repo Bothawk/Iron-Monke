@@ -1,7 +1,7 @@
 # Game design prompt
 
 This is the full design brief. Paste it into an AI coding assistant to keep building the game, one phase at a time.
-Phases 1-6 are already written in this project, so tell the assistant to start from Phase 7 and read the existing code first.
+Phases 1-7 are already written in this project, so tell the assistant to start from Phase 8 and read the existing code first.
 
 **Direction: arcade, not realistic.** Aim goes exactly where the crosshair is (no scope sway or hold-breath), movement is fast and forgiving, and feedback is loud and flashy.
 
@@ -250,7 +250,7 @@ PHASE 3 (DONE): Feel pass (viewmodel, camera, tracers, impact effects, all sound
 PHASE 4 (DONE): HUD, killfeed, killcam, scoreboard. Knife.
 PHASE 5 (DONE): Free-For-All match system and the Cinder Terraces map.
 PHASE 6 (DONE): Data saving, coins, the other 4 snipers, the shop, attachments, plus the settings menu.
-PHASE 7: Main menu (3D weapon showcase, PLAY), mobile and controller support, and INSPECT animations: press F to show off the gun. Make them flashy, not realistic: a fast spin of the rifle in the hand, a flip in the air and a catch, the bolt racked with a flourish, the scope glinting, and the skin's accent color glowing during it. Each sniper gets its own inspect style, and Legendary skins (phase 8) get a special one. Interrupt it instantly on scope, fire or switch.
+PHASE 7 (DONE): Main menu (3D weapon showcase, PLAY), mobile and controller support, and INSPECT animations: press F to show off the gun. Make them flashy, not realistic: a fast spin of the rifle in the hand, a flip in the air and a catch, the bolt racked with a flourish, the scope glinting, and the skin's accent color glowing during it. Each sniper gets its own inspect style, and Legendary skins (phase 8) get a special one. Interrupt it instantly on scope, fire or switch.
 PHASE 8: Robux skins (ProcessReceipt), daily rewards, quests, codes, leaderboards, season pass, badges.
 PHASE 9: Polish and performance (profile with the MicroProfiler, fix anything over budget), exploit test (try speed hacking, firing too fast and fake hits, and confirm the server rejects them).
 

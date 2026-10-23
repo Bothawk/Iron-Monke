@@ -11,6 +11,15 @@ export type Palette = {
 	Material: Enum.Material,
 }
 
+-- How a weapon shows off when inspected (F). Flashy on purpose.
+export type InspectStyle = {
+	Duration: number,
+	SpinAxis: "Roll" | "Yaw" | "Pitch", -- roll = around the barrel, yaw = flat twirl, pitch = end over end
+	Spins: number, -- full turns
+	TossHeight: number, -- studs thrown up (0 = stays in hand)
+	BoltRack: boolean, -- rack the bolt with a flourish at the end
+}
+
 export type Weapon = {
 	DisplayName: string,
 	Description: string,
@@ -32,6 +41,7 @@ export type Weapon = {
 	Penetration: number, -- how many thin walls a shot can pass through
 	Kick: number, -- recoil strength, 1 = normal
 	Palette: Palette,
+	Inspect: InspectStyle,
 }
 
 local function palette(primary: Color3, secondary: Color3, accent: Color3): Palette
@@ -60,6 +70,7 @@ local Weapons: { [string]: Weapon } = {
 		Penetration = 0,
 		Kick = 1,
 		Palette = palette(Color3.fromRGB(58, 60, 66), Color3.fromRGB(28, 29, 33), Color3.fromRGB(255, 140, 40)),
+		Inspect = { Duration = 1.6, SpinAxis = "Roll", Spins = 1, TossHeight = 0, BoltRack = true },
 	},
 	Needle = {
 		DisplayName = "NEEDLE",
@@ -82,6 +93,7 @@ local Weapons: { [string]: Weapon } = {
 		Penetration = 0,
 		Kick = 0.8,
 		Palette = palette(Color3.fromRGB(226, 228, 234), Color3.fromRGB(60, 64, 74), Color3.fromRGB(70, 210, 255)),
+		Inspect = { Duration = 1.3, SpinAxis = "Yaw", Spins = 2, TossHeight = 0, BoltRack = true },
 	},
 	Harpoon = {
 		DisplayName = "HARPOON",
@@ -104,6 +116,7 @@ local Weapons: { [string]: Weapon } = {
 		Penetration = 1,
 		Kick = 1.4,
 		Palette = palette(Color3.fromRGB(70, 82, 64), Color3.fromRGB(34, 38, 30), Color3.fromRGB(230, 200, 60)),
+		Inspect = { Duration = 1.8, SpinAxis = "Roll", Spins = 1, TossHeight = 0.6, BoltRack = true },
 	},
 	Twinbolt = {
 		DisplayName = "TWINBOLT",
@@ -126,6 +139,7 @@ local Weapons: { [string]: Weapon } = {
 		Penetration = 0,
 		Kick = 1.1,
 		Palette = palette(Color3.fromRGB(96, 44, 52), Color3.fromRGB(36, 22, 26), Color3.fromRGB(255, 90, 110)),
+		Inspect = { Duration = 1.7, SpinAxis = "Pitch", Spins = 1, TossHeight = 1.2, BoltRack = true },
 	},
 	Pulse = {
 		DisplayName = "PULSE",
@@ -148,6 +162,7 @@ local Weapons: { [string]: Weapon } = {
 		Penetration = 0,
 		Kick = 0.7,
 		Palette = palette(Color3.fromRGB(40, 44, 70), Color3.fromRGB(20, 22, 34), Color3.fromRGB(160, 110, 255)),
+		Inspect = { Duration = 1.5, SpinAxis = "Yaw", Spins = 1, TossHeight = 0.9, BoltRack = false },
 	},
 }
 
@@ -336,6 +351,7 @@ local WeaponConfig = {
 
 	Knife = {
 		DisplayName = "KNIFE",
+		Inspect = { Duration = 1.2, SpinAxis = "Yaw", Spins = 3, TossHeight = 0.7, BoltRack = false } :: InspectStyle,
 		SwitchTime = 0.2, -- swapping between sniper and knife
 		Slash = { Damage = 50, Range = 5, Cooldown = 0.35, Radius = 1.2 },
 		-- Dashes forward and hits the first enemy it reaches.

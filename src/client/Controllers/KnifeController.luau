@@ -15,6 +15,7 @@ local Signal = require(ReplicatedStorage.Shared.Util.Signal)
 local WeaponConfig = require(ReplicatedStorage.Shared.Config.WeaponConfig)
 local MovementController = require(script.Parent.MovementController)
 local WeaponController = require(script.Parent.WeaponController)
+local Inspect = require(script.Parent.Parent.Weapon.Inspect)
 local Viewmodel = require(script.Parent.Parent.Weapon.Viewmodel)
 
 local player = Players.LocalPlayer
@@ -92,6 +93,7 @@ local function slash()
 		return
 	end
 	lastSlashAt = now
+	WeaponController.CancelInspect()
 	KnifeController.Swung:Fire("Slash")
 
 	local camera = workspace.CurrentCamera
@@ -108,6 +110,7 @@ local function lunge()
 	end
 	lastLungeAt = now
 	lungeHitDone = false
+	WeaponController.CancelInspect()
 	KnifeController.Swung:Fire("Lunge")
 	MovementController.Dash(workspace.CurrentCamera.CFrame.LookVector, Knife.Lunge.DashDistance, Knife.Lunge.DashTime)
 end
@@ -145,6 +148,10 @@ local function swingOffset(now: number): CFrame
 	return CFrame.identity
 end
 
+-- For the touch buttons.
+KnifeController.Slash = slash
+KnifeController.Lunge = lunge
+
 function KnifeController.Start()
 	UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
 		if gameProcessed or WeaponController.State.Equipped ~= "Knife" then
@@ -176,12 +183,21 @@ function KnifeController.Start()
 			bob = Vector2.new(math.sin(bobPhase) * strength, -math.abs(math.cos(bobPhase)) * strength)
 		end
 
+		local detached, glow = CFrame.identity, 0
+		local style, elapsed = WeaponController.GetInspect("Knife")
+		if style then
+			local motion, _, inspectGlow = Inspect.Pose(style, elapsed)
+			detached, glow = motion, inspectGlow
+		end
+		viewmodel:SetGlow(glow)
+
 		local lower = WeaponController.GetLower("Knife")
 		viewmodel:SetVisible(WeaponController.State.Alive and lower < 1)
 		viewmodel:Update(workspace.CurrentCamera, {
 			AdsAlpha = 0,
 			Lower = lower,
 			Extra = swingOffset(now),
+			Detached = detached,
 			KickBack = 0,
 			KickPitch = 0,
 			Dip = 0,

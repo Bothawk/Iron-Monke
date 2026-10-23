@@ -397,6 +397,8 @@ function WeaponHud.Start()
 	end)
 
 	RunService.RenderStepped:Connect(function(dt)
+		-- Nothing to show on the title screen, before the first spawn.
+		gui.Enabled = player.Character ~= nil
 		local now = os.clock()
 		local camera = workspace.CurrentCamera
 		local viewport = camera.ViewportSize

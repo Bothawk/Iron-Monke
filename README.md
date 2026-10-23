@@ -3,9 +3,10 @@
 A fast, sniper-only Roblox FPS with Krunker-style quickscoping and movement that builds momentum.
 The full design is in [docs/GAME_PROMPT.md](docs/GAME_PROMPT.md).
 
-**Status: Phases 1–6 are written but haven't been played yet.** That covers movement, all 5 snipers with
+**Status: Phases 1–7 are written but haven't been played yet.** That covers movement, all 5 snipers with
 attachments, sounds and effects, the knife, kill feed, scoreboard and death cam, the Free-For-All match on Cinder
-Terraces, saving, coins, the shop and the settings menu. Next step is testing in Roblox Studio. Expect a few bugs on
+Terraces, saving, coins, the shop, the settings menu, the main menu, inspect animations, and phone and controller
+support. Next step is testing in Roblox Studio. Expect a few bugs on
 the first run.
 
 The game is **arcade-style on purpose**: your shot always goes exactly where the crosshair is, with no scope sway.
@@ -29,7 +30,8 @@ You need a Windows PC or a Mac. Roblox Studio doesn't run on iPad.
    - Click `default.project.json` to start the Rojo server.
 7. **Connect Studio:** open Roblox Studio, create a new **Baseplate** place, open the **Plugins** tab, click
    **Rojo**, then **Connect**. All the scripts appear in Studio.
-8. **Play:** press **Play** (F5). The game builds the map itself and starts with a 15-second warm-up.
+8. **Play:** press **Play** (F5). The game builds the map itself and opens on the main menu; press **PLAY** to
+   spawn. The first match starts after a 15-second warm-up.
 
 Leave VS Code and Rojo running while you work. Every file you save in VS Code updates in Studio right away.
 
@@ -63,13 +65,18 @@ stop playing (you'll see a warning in Output).
 | Sniper / knife | 1 / 3, or Q to swap | Y to swap |
 | Knife slash / lunge | Left click / right click | Right trigger / left trigger |
 | Scoreboard (hold) | Tab | View / Back |
-| Menu (loadout, shop, settings, stats) | M | |
+| Inspect your weapon | F | D-pad up |
+| Menu (loadout, shop, settings, stats) | M | D-pad down (B to close, D-pad to navigate) |
 | Vote for a map | F1 / F2 (or click, on the results screen) | |
 | Debug info | F3 | |
 
 Scope and sprint can be switched to toggle (click once) instead of hold in **M → Settings → Controls**.
 
-Phone and tablet touch controls come in phase 7.
+**Phones and tablets:** move with the on-screen thumbstick (push it all the way forward to sprint) and drag
+anywhere else to look. Buttons on the right: FIRE (knife: slash), SCOPE (taps on and off; knife: lunge), JUMP,
+SLIDE (hold), R (reload), SWAP and F (inspect); ☰ opens the menu. Button size is in **Settings → Controls**.
+
+**Controllers** also auto-sprint with the stick pushed fully forward (can be turned off in Settings).
 
 ## The match
 
@@ -160,6 +167,12 @@ lunge. Winning pays 150, and 2nd or 3rd place pays 75. Warm-up kills and Test Ra
 
 Settings save to your profile, so they follow you between servers.
 
+## Inspecting (F)
+
+Each weapon shows off differently: VANTA does a barrel roll and racks the bolt, NEEDLE twirls twice, HARPOON
+spins and hops, TWINBOLT flips end over end, PULSE twirls and tosses, and the knife spins three times in the air.
+The accent parts glow during the spin. Scoping, firing, reloading or switching cancels it instantly.
+
 ## How the knife works
 
 - Press **3** or **Q**. You move 15% faster with it out, Flow drains half as fast, and slide boosts come back
@@ -207,6 +220,13 @@ Work through these in Studio and tell me anything that's off. All the numbers ar
 - [ ] Jumping over the south railing into the sea kills you and shows "fell" in the kill feed.
 - [ ] No red errors in the Output window (View → Output), and no "[AntiCheat] ... pulled back" during normal play.
 
+**Main menu, inspect, touch and controller**
+- [ ] Joining shows the main menu with the camera circling the map and your sniper turning on the right. Nobody can
+      shoot you there; PLAY spawns you. The LOADOUT/SHOP/SETTINGS/STATS buttons open the menu.
+- [ ] F plays the inspect for each sniper and the knife; scoping or firing cancels it at once.
+- [ ] Studio's device emulator (Test tab → Device) on a phone shows the touch buttons, and every button works.
+- [ ] With a controller: D-pad down opens the menu, the D-pad moves between buttons, A presses, B closes.
+
 **Menu, shop and saving** (M)
 - [ ] The menu frees the mouse; clicking in it never fires the gun, and right-click doesn't scope.
 - [ ] Every setting changes something you can see or hear right away, and they're still set after rejoining (needs
@@ -233,6 +253,8 @@ Work through these in Studio and tell me anything that's off. All the numbers ar
 - Kill tags like AIRSHOT and FLOW KILL trust what the shooter's game reports, so they only appear in banners and
   stats; coin bonuses only use tags the server checks itself.
 - All five snipers share one model, told apart by color. Unique models come later.
+- Touch buttons are in fixed positions; dragging them around is a later addition.
+- The game is called "SNIPER GAME" on the main menu until you pick a name (`src/shared/Config/GameConfig.luau`).
 
 ---
 
@@ -246,6 +268,7 @@ src/shared/                      → ReplicatedStorage.Shared (used by client an
   Config/WeaponConfig.luau       every weapon and combat number
   Config/MatchConfig.luau        match rules, coin rewards and map rotation
   Config/SettingsConfig.luau     every player setting with its default and range
+  Config/GameConfig.luau         the game's name and tagline
   Config/SoundConfig.luau        every sound (placeholders to swap)
   Combat/Hitboxes.luau           which body parts are head, body or limb
   Combat/KillTags.luau           HEADSHOT, NOSCOPE, QUICKSCOPE and other kill tags
@@ -262,6 +285,7 @@ src/server/                      → ServerScriptService.Server
   Services/MatchService          warm-up, vote, match, results loop, end-of-match coins
   Services/DataService           saving and loading profiles (with locking and retries)
   Services/ShopService           buying snipers and choosing loadouts
+  Services/PlayService           spawning after PLAY, and respawning after deaths
   Services/MapService            loads maps, kills anyone who falls off
   Services/SpawnService          safe spawn picking and spawn protection
   Services/CombatService         checks every shot and knife hit, applies damage, health regen
@@ -282,6 +306,8 @@ src/client/                      → StarterPlayerScripts.Client
   Controllers/ProfileController      coins, owned snipers, loadouts and stats from the server
   Controllers/MenuController         the M menu: loadout, shop, settings, stats
   Controllers/GraphicsController     applies the graphics quality setting
+  Controllers/MainMenuController     title screen, 3D sniper showcase, PLAY
+  Controllers/TouchController        on-screen buttons for phones and tablets
   Controllers/KnifeController        knife slash and lunge
   Controllers/CameraController       first person, camera dip/tilt, FOV, scope zoom, fire kick
   Controllers/SoundController        plays every sound
@@ -296,10 +322,12 @@ src/client/                      → StarterPlayerScripts.Client
   Controllers/DebugHud               F3 debug info
   Weapon/Viewmodel.luau              first-person sniper, knife and arms
   Weapon/Tracers.luau                bullet tracers
+  Weapon/Inspect.luau                the inspect animation
   UI/Widgets.luau                    buttons, sliders, toggles and stat bars for menus
 stylua.toml                      code formatting settings
 ```
 
-## Next up: Phase 7
+## Next up: Phase 8
 
-A main menu with a 3D weapon showcase, phone and controller support, and flashy inspect animations (press F).
+Robux skins (with special inspects for Legendary ones), daily rewards, quests, codes, leaderboards, a season pass
+and badges.
